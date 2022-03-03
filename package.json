@@ -1,5 +1,5 @@
 {
-  "name": "yearn-protocol",
+  "name": "yearn-tranche-strategy",
   "devDependencies": {
     "@commitlint/cli": "^11.0.0",
     "@commitlint/config-conventional": "^11.0.0",
@@ -10,6 +10,7 @@
     "pretty-quick": "^3.0.2"
   },
   "scripts": {
+    "test:fork": "brownie test --network alchemy-mainnet-fork",
     "lint": "pretty-quick --pattern '**/*.*(sol|json)' --verbose",
     "lint:check": "prettier --check **/*.sol **/*.json",
     "lint:fix": "pretty-quick --pattern '**/*.*(sol|json)' --staged --verbose"
