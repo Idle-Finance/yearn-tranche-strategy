@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0
-// Feel free to change the license, but this is what we use
-
-// Feel free to change this version of Solidity. We support >=0.6.0 <0.7.0;
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-// These are the core Yearn libraries
 import {
     BaseStrategy,
     StrategyParams
@@ -18,33 +14,49 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/idle/IIdleCDO.sol";
+import "../interfaces/uniswap/IUniswapV2Router02.sol";
 import "../interfaces/IERC20Metadata.sol";
+import "../interfaces/IWETH.sol";
 
 contract Strategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
 
-    uint256 private immutable _EXP_SCALE;
+    uint256 internal immutable _EXP_SCALE;
+
+    IWETH internal weth;
 
     IIdleCDO public idleCDO;
+
     IERC20Metadata public tranche;
+
     bool public isAATranche;
+
+    IUniswapV2Router02 public router;
 
     constructor(
         address _vault,
         IIdleCDO _idleCDO,
-        bool _isAATranche
+        bool _isAATranche,
+        IUniswapV2Router02 _router,
+        IWETH _weth
     ) public BaseStrategy(_vault) {
         require(
             address(want) == _idleCDO.token(),
             "Vault want is different from Idle token underlying"
         );
-
+        require(
+            address(_router) != address(0) && address(_weth) != address(0),
+            "strat/zero-address"
+        );
+        router = _router;
+        weth = _weth;
         isAATranche = _isAATranche;
-        maxReportDelay = 6300;
-        profitFactor = 100;
-        debtThreshold = 0;
+        // TODO:
+        // maxReportDelay = 6300;
+        // profitFactor = 100;
+        // debtThreshold = 0;
 
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
@@ -140,21 +152,18 @@ contract Strategy is BaseStrategy {
 
         uint256 wantBal = _balance(_want);
         uint256 totalAssets = wantBal.add(_trancheInWant(_tranche));
-
-        // stratに貸したた金
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
-        // 利益出てるなら true
+        // true if working greatly
         if (totalAssets >= debt) {
             _profit = totalAssets.sub(debt);
-            //　引き出す totalAssets - totalDebt  + debtOutstanding
-            uint256 toWithdraw = _profit.add(_debtOutstanding);
+            // amounts of want should be withdrawn
+            uint256 toWithdraw = _profit.add(_debtOutstanding); // totalAssets - totalDebt + debtOutstanding
 
             if (toWithdraw > wantBal) {
                 //we step our withdrawals.
                 uint256 withdrawn = _divest(_toTranche(_tranche, toWithdraw));
                 if (withdrawn < toWithdraw) {
-                    //  損失
                     _loss = toWithdraw.sub(withdrawn);
                 }
             }
@@ -182,11 +191,34 @@ contract Strategy is BaseStrategy {
         }
     }
 
+    /**
+     * Perform any adjustments to the core position(s) of this Strategy given
+     * what change the Vault made in the "investable capital" available to the
+     * Strategy. Note that all "free capital" in the Strategy after the report
+     * was made is available for reinvestment. Also note that this number
+     * could be 0, and you should handle that scenario accordingly.
+     *
+     * See comments regarding `_debtOutstanding` on `prepareReturn()`.
+     */
     function adjustPosition(uint256 _debtOutstanding) internal override {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
+        uint256 wantBal = _balance(want);
+        if (wantBal != 0) {
+            _invest(wantBal);
+        }
     }
 
+    /**
+     * Liquidate up to `_amountNeeded` of `want` of this strategy's positions,
+     * irregardless of slippage. Any excess will be re-invested with `adjustPosition()`.
+     * This function should return the amount of `want` tokens made available by the
+     * liquidation. If there is a difference between them, `_loss` indicates whether the
+     * difference is due to a realized loss, or if there is some other sitution at play
+     * (e.g. locked funds) where the amount made available is less than what is needed.
+     *
+     * NOTE: The invariant `_liquidatedAmount + _loss <= _amountNeeded` should always be maintained
+     */
     function liquidatePosition(uint256 _amountNeeded)
         internal
         override
@@ -201,7 +233,7 @@ contract Strategy is BaseStrategy {
 
         if (_amountNeeded > wantBal) {
             uint256 toWithdraw = _amountNeeded.sub(wantBal);
-            uint256 withdrawn = _divest(_toTranche(_tranche, _amountNeeded));
+            uint256 withdrawn = _divest(_toTranche(_tranche, toWithdraw));
             if (withdrawn < toWithdraw) {
                 _loss = toWithdraw.sub(withdrawn);
             }
@@ -226,6 +258,11 @@ contract Strategy is BaseStrategy {
     function prepareMigration(address _newStrategy) internal override {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
+        IERC20 _tranche = tranche;
+        uint256 trancheBalance = _balance(_tranche);
+        if (trancheBalance != 0) {
+            _tranche.safeTransfer(_newStrategy, trancheBalance);
+        }
     }
 
     // Override this to add all tokens/tokenized positions this contract manages
@@ -246,7 +283,12 @@ contract Strategy is BaseStrategy {
         view
         override
         returns (address[] memory)
-    {}
+    {
+        address[] memory protected = new address[](1);
+        protected[0] = address(tranche);
+
+        return protected;
+    }
 
     /**
      * @notice
@@ -258,21 +300,56 @@ contract Strategy is BaseStrategy {
      *
      *      given 1e17 wei (0.1 ETH) as input, and want is USDC (6 decimals),
      *      with USDC/ETH = 1800, this should give back 1800000000 (180 USDC)
-     *
-     * @param _amtInWei The amount (in wei/1e-18 ETH) to convert to `want`
+     *  NOTE: WARNING: manipulatable and simple routing
+     * @param _amount The amount (in wei/1e-18 ETH) to convert to `want`
      * @return The amount in `want` of `_amtInEth` converted to `want`
      **/
-    function ethToWant(uint256 _amtInWei)
+    function ethToWant(uint256 _amount)
         public
         view
         virtual
         override
         returns (uint256)
     {
-        // TODO create an accurate price oracle
-        return _amtInWei;
+        if (_amount == 0) {
+            return 0;
+        }
+
+        address wethAddress = address(weth);
+        if (address(want) == wethAddress) {
+            return _amount;
+        }
+
+        uint256[] memory amounts =
+            router.getAmountsOut(
+                _amount,
+                _getTokenOutPathV2(wethAddress, address(want))
+            );
+
+        return amounts[amounts.length - 1];
     }
 
+    /// @notice deposit `want` to IdleCDO and mint AATranche or BBTranche
+    /// @param _wantAmount amount of `want` to deposit
+    /// @return trancheRedeemed : tranche tokens minted
+    function _invest(uint256 _wantAmount)
+        internal
+        returns (uint256 trancheRedeemed)
+    {
+        IERC20 _tranche = tranche;
+        function(uint256) external returns (uint256) depositTranche =
+            isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
+
+        uint256 before = _balance(_tranche);
+
+        depositTranche(_wantAmount);
+
+        trancheRedeemed = _balance(_tranche).sub(before);
+    }
+
+    /// @notice redeem `tranche` from IdleCDO and withdraw `want`
+    /// @param _trancheAmount amount of `want` to deposit
+    /// @return wantRedeemed : want redeemed
     function _divest(uint256 _trancheAmount)
         internal
         returns (uint256 wantRedeemed)
@@ -305,11 +382,34 @@ contract Strategy is BaseStrategy {
 
     function _toTranche(IERC20 _tranche, uint256 wantAmount)
         internal
+        view
         returns (uint256)
     {
+        if (wantAmount == 0) return 0;
         return
             wantAmount.mul(_EXP_SCALE).div(
                 idleCDO.tranchePrice(address(_tranche))
             );
+    }
+
+    function _getTokenOutPathV2(address _tokenIn, address _tokenOut)
+        internal
+        view
+        returns (address[] memory _path)
+    {
+        require(_tokenIn != _tokenOut, "strat/identical-address");
+        address wethAddress = address(weth);
+        bool isWeth = _tokenIn == wethAddress || _tokenOut == wethAddress;
+
+        if (isWeth) {
+            _path = new address[](2);
+            _path[0] = _tokenIn;
+            _path[1] = _tokenOut;
+        } else {
+            _path = new address[](3);
+            _path[0] = _tokenIn;
+            _path[1] = wethAddress;
+            _path[2] = _tokenOut;
+        }
     }
 }
