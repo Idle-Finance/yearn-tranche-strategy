@@ -1,3 +1,27 @@
+# Yearn Tranche Strategy
+## Getting Started
+Create `.env` file with the following environment variables.
+
+```bash
+ETHERSCAN_TOKEN=<Your Etherscan token>
+```
+
+To add Alchemy as RPC provider:
+```bash
+brownie networks add Ethereum alchemy-mainnet chainId=1 host=https://eth-mainnet.alchemyapi.io/v2/<ALCHEMY_API_KEY> explorer=https://api.etherscan.io/api muticall2=0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696
+```
+
+To set up mainnet forking :
+
+```bash
+brownie networks add development alchemy-mainnet-forking cmd=ganache-cli fork=alchemy-mainnet mnemonic=brownie port=8545 accounts=10 host=http://127.0.0.1 timeout=120
+```
+
+For specific options and more information about each command, type: 
+```bash
+brownie networks --help
+```
+
 # Yearn Strategy Brownie Mix
 
 ## What you'll find here

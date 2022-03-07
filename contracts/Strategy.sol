@@ -25,34 +25,25 @@ contract Strategy is BaseStrategy {
 
     uint256 internal immutable _EXP_SCALE;
 
-    IWETH internal weth;
+    IWETH public constant WETH =
+        IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    IERC20Metadata public immutable tranche;
 
     IIdleCDO public idleCDO;
 
-    IERC20Metadata public tranche;
-
-    bool public isAATranche;
-
     IUniswapV2Router02 public router;
+
+    bool public immutable isAATranche;
 
     constructor(
         address _vault,
         IIdleCDO _idleCDO,
         bool _isAATranche,
-        IUniswapV2Router02 _router,
-        IWETH _weth
+        IUniswapV2Router02 _router
     ) public BaseStrategy(_vault) {
-        require(
-            address(want) == _idleCDO.token(),
-            "Vault want is different from Idle token underlying"
-        );
-        require(
-            address(_router) != address(0) && address(_weth) != address(0),
-            "strat/zero-address"
-        );
-        router = _router;
-        weth = _weth;
-        isAATranche = _isAATranche;
+        require(address(want) == _idleCDO.token(), "strat/inconsistent-want");
+        require(address(_router) != address(0), "strat/zero-address");
         // TODO:
         // maxReportDelay = 6300;
         // profitFactor = 100;
@@ -60,6 +51,8 @@ contract Strategy is BaseStrategy {
 
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
+        router = _router;
+
         IERC20Metadata _tranche =
             IERC20Metadata(
                 _isAATranche ? _idleCDO.AATranche() : _idleCDO.BBTranche()
@@ -315,7 +308,7 @@ contract Strategy is BaseStrategy {
             return 0;
         }
 
-        address wethAddress = address(weth);
+        address wethAddress = address(WETH);
         if (address(want) == wethAddress) {
             return _amount;
         }
@@ -328,6 +321,8 @@ contract Strategy is BaseStrategy {
 
         return amounts[amounts.length - 1];
     }
+
+    /* **** Internal Mutative functions **** */
 
     /// @notice deposit `want` to IdleCDO and mint AATranche or BBTranche
     /// @param _wantAmount amount of `want` to deposit
@@ -365,6 +360,15 @@ contract Strategy is BaseStrategy {
         wantRedeemed = _balance(_want).sub(before);
     }
 
+    // /// @notice
+    // /// @param _trancheAmount amount of `tranche` to stake
+    // function _stake(uint256 _trancheAmount) internal returns (uint256) {
+    //     IERC20 _tranche = tranche;
+
+    //     idleCDO.stake();
+    // }
+
+    /* **** Internal Helper functions **** */
     function _balance(IERC20 _token) internal view returns (uint256 balance) {
         balance = _token.balanceOf(address(this));
     }
@@ -398,7 +402,7 @@ contract Strategy is BaseStrategy {
         returns (address[] memory _path)
     {
         require(_tokenIn != _tokenOut, "strat/identical-address");
-        address wethAddress = address(weth);
+        address wethAddress = address(WETH);
         bool isWeth = _tokenIn == wethAddress || _tokenOut == wethAddress;
 
         if (isWeth) {
