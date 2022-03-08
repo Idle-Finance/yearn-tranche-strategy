@@ -42,7 +42,6 @@ contract Strategy is BaseStrategy {
         bool _isAATranche,
         IUniswapV2Router02 _router
     ) public BaseStrategy(_vault) {
-        require(address(want) == _idleCDO.token(), "strat/inconsistent-want");
         require(address(_router) != address(0), "strat/zero-address");
         // TODO:
         // maxReportDelay = 6300;
@@ -332,12 +331,10 @@ contract Strategy is BaseStrategy {
         returns (uint256 trancheRedeemed)
     {
         IERC20 _tranche = tranche;
-        function(uint256) external returns (uint256) depositTranche =
-            isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
 
         uint256 before = _balance(_tranche);
 
-        depositTranche(_wantAmount);
+        _depositTranche(_wantAmount);
 
         trancheRedeemed = _balance(_tranche).sub(before);
     }
@@ -350,12 +347,10 @@ contract Strategy is BaseStrategy {
         returns (uint256 wantRedeemed)
     {
         IERC20 _want = want;
-        function(uint256) external returns (uint256) withdrawTranche =
-            isAATranche ? idleCDO.withdrawAA : idleCDO.withdrawBB;
 
         uint256 before = _balance(_want);
 
-        withdrawTranche(_trancheAmount);
+        _withdrawTranche(_trancheAmount);
 
         wantRedeemed = _balance(_want).sub(before);
     }
@@ -367,6 +362,20 @@ contract Strategy is BaseStrategy {
 
     //     idleCDO.stake();
     // }
+
+    function _depositTranche(uint256 _wantAmount) internal virtual {
+        function(uint256) external returns (uint256) _depositXX =
+            isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
+
+        _depositXX(_wantAmount);
+    }
+
+    function _withdrawTranche(uint256 _trancheAmount) internal virtual {
+        function(uint256) external returns (uint256) _withdrawXX =
+            isAATranche ? idleCDO.withdrawAA : idleCDO.withdrawBB;
+
+        _withdrawXX(_trancheAmount);
+    }
 
     /* **** Internal Helper functions **** */
     function _balance(IERC20 _token) internal view returns (uint256 balance) {

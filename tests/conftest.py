@@ -3,22 +3,22 @@ from brownie import config
 from brownie import Contract
 
 STRATEGY_CONFIGS = {
-    "STETH": {
+    # "STETH": {
+    #     "idleCDO": "0x34dcd573c5de4672c8248cd12a99f875ca112ad8",
+    #     "tranche_type": "AA",
+    #     "whale": "0xeb9c1ce881f0bdb25eac4d74fccbacf4dd81020a",
+    #     "token_address": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+    #     "amount": 100 * 10**18,  # 100 STETH
+    #     "wstEth_address": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+    # },
+    "WETH": {
         "idleCDO": "0x34dcd573c5de4672c8248cd12a99f875ca112ad8",
         "tranche_type": "AA",
-        "whale": "0xeb9c1ce881f0bdb25eac4d74fccbacf4dd81020a",
-        "token_address": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
-        "amount": 100 * 10**18,  # 100 STETH
-        "wstEth_address": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+        # Axie Infinity: Ronin Bridge
+        "whale": "0x1A2a1c938CE3eC39b6D47113c7955bAa9DD454F2",
+        "token_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "amount": "100"  # 100 ETH
     },
-    # "WETH": {
-    #     "idleCDO": "",
-    #     "tranche_type": "AA",
-    #     # Axie Infinity: Ronin Bridge
-    #     "whale": "0x1A2a1c938CE3eC39b6D47113c7955bAa9DD454F2",
-    #     "token_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-    #     "amount": "100"  # 100 ETH
-    # },
     # "FEI": {
     #     "idleCDO": "0x77648a2661687ef3b05214d824503f6717311596",
     #     "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
@@ -81,6 +81,11 @@ def strategy_config(request):
 def token(strategy_config):
     # this should be the address of the ERC-20 used by the strategy/vault (DAI)
     yield Contract(strategy_config["token_address"])
+
+
+@pytest.fixture
+def wsteth(strategy_config):
+    yield Contract(strategy_config["wstEth_address"])
 
 
 @pytest.fixture
