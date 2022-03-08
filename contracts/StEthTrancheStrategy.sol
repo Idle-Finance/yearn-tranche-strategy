@@ -45,23 +45,26 @@ contract StEthTrancheStrategy is Strategy {
     }
 
     function _depositTranche(uint256 _wantAmount) internal override {
+        // weth => eth => steth
         WETH.withdraw(_wantAmount);
         _mintStEth(_wantAmount);
-
+        // deposit steth to idle
         super._depositTranche(_wantAmount);
     }
 
     function _withdrawTranche(uint256 _trancheAmount) internal override {
         uint256 _stEthBalanceBefore = _balance(stETH);
 
-        super._withdrawTranche(_trancheAmount);
+        super._withdrawTranche(_trancheAmount); // withraw tranche and get steth
 
         uint256 _amountIn = _stEthBalanceBefore.sub(_balance(stETH));
 
+        // steth => eth
         uint256 slippageAllowance =
             _amountIn.mul(DENOMINATOR.sub(maximumSlippage)).div(DENOMINATOR);
         StableSwapSTETH.exchange(STETHID, WETHID, _amountIn, slippageAllowance);
 
+        // eth => weth
         WETH.deposit{ value: address(this).balance }();
     }
 
