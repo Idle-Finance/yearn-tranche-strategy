@@ -92,14 +92,18 @@ contract Strategy is BaseStrategy {
      *  value to be "safe".
      * @return The estimated total assets in this Strategy.
      */
-    function estimatedTotalAssets() public view override returns (uint256) {
+    function estimatedTotalAssets()
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
         // TODO: Build a more accurate estimate using the value of all positions in terms of `want`
         IERC20Metadata _tranche = tranche;
-        uint256 balances = _tranche.balanceOf(address(this));
-        uint256 price = idleCDO.tranchePrice(address(_tranche));
         return
             want.balanceOf(address(this)).add(
-                balances.mul(price).div(_EXP_SCALE)
+                _getTrancheBalanceInWant(_tranche)
             );
     }
 
@@ -129,6 +133,7 @@ contract Strategy is BaseStrategy {
      */
     function prepareReturn(uint256 _debtOutstanding)
         internal
+        virtual
         override
         returns (
             uint256 _profit,
@@ -143,7 +148,7 @@ contract Strategy is BaseStrategy {
         IERC20 _tranche = tranche;
 
         uint256 wantBal = _balance(_want);
-        uint256 totalAssets = wantBal.add(_trancheInWant(_tranche));
+        uint256 totalAssets = wantBal.add(_getTrancheBalanceInWant(_tranche));
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
         // true if working greatly
@@ -154,7 +159,8 @@ contract Strategy is BaseStrategy {
 
             if (toWithdraw > wantBal) {
                 //we step our withdrawals.
-                uint256 withdrawn = _divest(_toTranche(_tranche, toWithdraw));
+                uint256 withdrawn =
+                    _divest(_wantsInTranche(_tranche, toWithdraw));
                 if (withdrawn < toWithdraw) {
                     _loss = toWithdraw.sub(withdrawn);
                 }
@@ -225,7 +231,7 @@ contract Strategy is BaseStrategy {
 
         if (_amountNeeded > wantBal) {
             uint256 toWithdraw = _amountNeeded.sub(wantBal);
-            uint256 withdrawn = _divest(_toTranche(_tranche, toWithdraw));
+            uint256 withdrawn = _divest(_wantsInTranche(_tranche, toWithdraw));
             if (withdrawn < toWithdraw) {
                 _loss = toWithdraw.sub(withdrawn);
             }
@@ -273,6 +279,7 @@ contract Strategy is BaseStrategy {
     function protectedTokens()
         internal
         view
+        virtual
         override
         returns (address[] memory)
     {
@@ -325,10 +332,10 @@ contract Strategy is BaseStrategy {
 
     /// @notice deposit `want` to IdleCDO and mint AATranche or BBTranche
     /// @param _wantAmount amount of `want` to deposit
-    /// @return trancheRedeemed : tranche tokens minted
+    /// @return trancheMinted : tranche tokens minted
     function _invest(uint256 _wantAmount)
         internal
-        returns (uint256 trancheRedeemed)
+        returns (uint256 trancheMinted)
     {
         IERC20 _tranche = tranche;
 
@@ -336,7 +343,7 @@ contract Strategy is BaseStrategy {
 
         _depositTranche(_wantAmount);
 
-        trancheRedeemed = _balance(_tranche).sub(before);
+        trancheMinted = _balance(_tranche).sub(before);
     }
 
     /// @notice redeem `tranche` from IdleCDO and withdraw `want`
@@ -382,25 +389,49 @@ contract Strategy is BaseStrategy {
         balance = _token.balanceOf(address(this));
     }
 
-    function _trancheInWant(IERC20 _tranche)
+    /// @dev get tranche balances in this contract holds denominated in `want`
+    /// @notice Usually idleCDO.underlyingToken is equal to the `want`
+    function _getTrancheBalanceInWant(IERC20 _tranche)
         internal
         view
-        returns (uint256 balancesInWant)
-    {
-        uint256 price = idleCDO.tranchePrice(address(_tranche));
-        balancesInWant = _tranche.balanceOf(address(this)).mul(price).div(
-            _EXP_SCALE
-        );
-    }
-
-    function _toTranche(IERC20 _tranche, uint256 wantAmount)
-        internal
-        view
+        virtual
         returns (uint256)
     {
-        if (wantAmount == 0) return 0;
+        return _getTrancheBalanceInUnderlying(_tranche);
+    }
+
+    /// @dev get tranche balances in this contract holds denominated in `idleCDO.strategyToken`
+    function _getTrancheBalanceInUnderlying(IERC20 _tranche)
+        internal
+        view
+        returns (uint256 balancesInUnderlyingToken)
+    {
+        uint256 price = idleCDO.tranchePrice(address(_tranche));
+        balancesInUnderlyingToken = _tranche
+            .balanceOf(address(this))
+            .mul(price)
+            .div(_EXP_SCALE);
+    }
+
+    /// @dev convert `wantAmount` denominated in `tranche`
+    /// @notice Usually idleCDO.underlyingToken is equal to the `want`
+    function _wantsInTranche(IERC20 _tranche, uint256 wantAmount)
+        internal
+        view
+        virtual
+        returns (uint256)
+    {
+        return _underlyingTokensInTranche(_tranche, wantAmount);
+    }
+
+    /// @dev convert `underlyingTokens` denominated in `tranche`
+    function _underlyingTokensInTranche(
+        IERC20 _tranche,
+        uint256 underlyingTokens
+    ) internal view returns (uint256) {
+        if (underlyingTokens == 0) return 0;
         return
-            wantAmount.mul(_EXP_SCALE).div(
+            underlyingTokens.mul(_EXP_SCALE).div(
                 idleCDO.tranchePrice(address(_tranche))
             );
     }
