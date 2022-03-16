@@ -406,7 +406,7 @@ contract Strategy is BaseStrategy {
         view
         returns (uint256 balancesInUnderlyingToken)
     {
-        uint256 price = idleCDO.tranchePrice(address(_tranche));
+        uint256 price = idleCDO.virtualPrice(address(_tranche));
         balancesInUnderlyingToken = _tranche
             .balanceOf(address(this))
             .mul(price)
@@ -432,7 +432,7 @@ contract Strategy is BaseStrategy {
         if (underlyingTokens == 0) return 0;
         return
             underlyingTokens.mul(_EXP_SCALE).div(
-                idleCDO.tranchePrice(address(_tranche))
+                idleCDO.virtualPrice(address(_tranche))
             );
     }
 
