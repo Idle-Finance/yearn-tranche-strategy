@@ -151,7 +151,7 @@ contract Strategy is BaseStrategy {
         uint256 totalAssets = wantBal.add(_getTrancheBalanceInWant(_tranche));
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
-        // true if working greatly
+        // should be true if working greatly
         if (totalAssets >= debt) {
             _profit = totalAssets.sub(debt);
             // amounts of want should be withdrawn

@@ -39,7 +39,11 @@ contract StEthTrancheStrategy is Strategy {
     uint256 public maximumSlippage = 50; //out of 10000. 50 = 0.5%
 
     receive() external payable {
-        require(msg.sender == address(WETH), "strat/only-weth");
+        require(
+            msg.sender == address(WETH) ||
+                msg.sender == address(stableSwapSTETH),
+            "strat/recieve-eth"
+        );
     }
 
     constructor(
@@ -50,6 +54,10 @@ contract StEthTrancheStrategy is Strategy {
     ) public Strategy(_vault, _idleCDO, _isAATranche, _router) {
         require(address(want) == address(WETH), "strat/want-ne-weth");
         require(_idleCDO.token() == address(stETH), "strat/cdo-steth");
+
+        WETH.approve(address(stETH), type(uint256).max);
+        stETH.approve(address(idleCDO), type(uint256).max);
+        stETH.approve(address(stableSwapSTETH), type(uint256).max);
     }
 
     function _depositTranche(uint256 _wantAmount) internal override {
@@ -113,6 +121,7 @@ contract StEthTrancheStrategy is Strategy {
     }
 
     function updateMaxSlippage(uint256 _maximumSlippage) external onlyKeepers {
+        require(_maximumSlippage <= DENOMINATOR, "strat/invalid-slippage");
         maximumSlippage = _maximumSlippage;
     }
 }

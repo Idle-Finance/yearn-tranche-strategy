@@ -1,36 +1,39 @@
 import pytest
-from brownie import config
-from brownie import Contract
+from brownie import config, Contract
 
 STRATEGY_CONFIGS = {
-    # "STETH": {
-    #     "idleCDO": "0x34dcd573c5de4672c8248cd12a99f875ca112ad8",
+    # "WETH": {
+    #     "idleCDO": {
+    #         "address": "0x34dcd573c5de4672c8248cd12a99f875ca112ad8",
+    #         "underlying_token": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+    #         "strat_token": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+    #     },
     #     "tranche_type": "AA",
-    #     "whale": "0xeb9c1ce881f0bdb25eac4d74fccbacf4dd81020a",
-    #     "token_address": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
-    #     "amount": 100 * 10**18,  # 100 STETH
-    #     "wstEth_address": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"
+    #     # Axie Infinity: Ronin Bridge
+    #     "whale": "0x1A2a1c938CE3eC39b6D47113c7955bAa9DD454F2",
+    #     "token_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    #     "amount": 100 * 1e18,  # 100 ETH
+    #     "strategy": "StEthTrancheStrategy"
     # },
-    "WETH": {
-        "idleCDO": "0x34dcd573c5de4672c8248cd12a99f875ca112ad8",
+    "DAI": {
+        "idleCDO": {
+            "address": "0xd0dbcd556ca22d3f3c142e9a3220053fd7a247bc"
+        },
         "tranche_type": "AA",
-        # Axie Infinity: Ronin Bridge
-        "whale": "0x1A2a1c938CE3eC39b6D47113c7955bAa9DD454F2",
-        "token_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "amount": "100"  # 100 ETH
+        "whale": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
+        "token_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F  ",
+        "amount": 10000 * 1e18,
+        "strategy": "Strategy"
     },
     # "FEI": {
-    #     "idleCDO": "0x77648a2661687ef3b05214d824503f6717311596",
+    #     "idleCDO": {
+    #         "address": "0x77648a2661687ef3b05214d824503f6717311596"
+    #     },
+    #     "tranche_type": "AA",
     #     "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
     #     "token_address": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA  ",
-    #     "amount": "10000"  # 10000 ** 1e18
+    #     "amount": 10000 * 1e18
     # },
-    # "DAI": {
-    #     "idleCDO": "0xd0dbcd556ca22d3f3c142e9a3220053fd7a247bc",
-    #     "whale": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
-    #     "token_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F  ",
-    #     "amount": "10000"  # 10000 ** 1e18
-    # }
 }
 
 
@@ -83,14 +86,14 @@ def token(strategy_config):
     yield Contract(strategy_config["token_address"])
 
 
-@pytest.fixture
-def wsteth(strategy_config):
-    yield Contract(strategy_config["wstEth_address"])
+# @pytest.fixture
+# def wsteth(strategy_config):
+#     yield Contract("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0")
 
 
 @pytest.fixture
 def idleCDO(strategy_config):
-    yield Contract(strategy_config["idleCDO"])
+    yield Contract(strategy_config["idleCDO"]['address'])
 
 
 @pytest.fixture
@@ -111,21 +114,23 @@ def amount(accounts, token, user, strategy_config):
     # it impersonate an exchange address to use it's funds.
     reserve = accounts.at(strategy_config["whale"], force=True)
     amount = strategy_config["amount"]
-    token.transfer(user, amount, {"from": reserve})
+    token.transfer(
+        user, amount, {"from": reserve}
+    )
     yield amount
 
 
-@pytest.fixture
-def weth():
-    token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-    yield Contract(token_address)
+# @pytest.fixture
+# def weth():
+#     token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+#     yield Contract(token_address)
 
 
-@pytest.fixture
-def weth_amout(user, weth):
-    weth_amout = 10 ** 18
-    user.transfer(weth, weth_amout)
-    yield weth_amout
+# @pytest.fixture
+# def weth_amout(user, weth):
+#     weth_amout = 10 ** 18
+#     user.transfer(weth, weth_amout)
+#     yield weth_amout
 
 
 @pytest.fixture
@@ -139,11 +144,16 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, Strategy, gov, strategy_config):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, Strategy, StEthTrancheStrategy):
     is_AA = strategy_config['tranche_type'] == 'AA'
+
+    if strategy_config['strategy'] == 'StEthTrancheStrategy':
+        _Strategy = StEthTrancheStrategy
+    else:
+        _Strategy = Strategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        Strategy, vault, idleCDO, is_AA, sushiswap_router
+        _Strategy, vault, idleCDO, is_AA, sushiswap_router
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
