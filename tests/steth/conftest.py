@@ -37,16 +37,19 @@ def idleCDO(strategy_config):
     yield Contract(strategy_config["idleCDO"]['address'])
 
 
-# @pytest.fixture
-# def tranche(idleCDO, strategy_config):
-#     tranche_address = idleCDO.AATranche(
-#     ) if strategy_config['tranche_type'] == 'AA' else idleCDO.BBTranche()
-#     yield Contract(tranche_address)
+@pytest.fixture
+def stable_swap():
+    yield Contract("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022")
 
 
 @pytest.fixture
 def steth_price_feed():
     yield Contract("0xAb55Bf4DfBf469ebfe082b7872557D1F87692Fe6")
+
+
+@pytest.fixture
+def underlying_token(strategy_config):
+    yield Contract(strategy_config["idleCDO"]['underlying_token'])
 
 
 @pytest.fixture

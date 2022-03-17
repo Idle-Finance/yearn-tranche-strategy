@@ -3,8 +3,7 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "../interfaces/lido/IStETH.sol";
-import "../interfaces/lido/IWstETH.sol";
-import "../interfaces/lido/StEthPriceFeed.sol";
+import "../interfaces/lido/IStEthPriceFeed.sol";
 import "../interfaces/curve/IStEthStableSwap.sol";
 
 import {
@@ -22,14 +21,11 @@ contract StEthTrancheStrategy is TrancheStrategy {
     IStEthStableSwap public constant stableSwapSTETH =
         IStEthStableSwap(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
 
-    StEthPriceFeed public constant priceFeed =
-        StEthPriceFeed(0xAb55Bf4DfBf469ebfe082b7872557D1F87692Fe6);
+    IStEthPriceFeed public constant priceFeed =
+        IStEthPriceFeed(0xAb55Bf4DfBf469ebfe082b7872557D1F87692Fe6);
 
     IStETH public constant stETH =
         IStETH(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
-
-    IWstETH public constant wstETH =
-        IWstETH(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
 
     uint256 private constant DENOMINATOR = 10_000;
     address private constant REFERRAL = address(0);
@@ -91,6 +87,12 @@ contract StEthTrancheStrategy is TrancheStrategy {
     /// @param _trancheAmount tranche amount to redeem
     function _withdrawTranche(uint256 _trancheAmount) internal override {
         uint256 _stEthBalanceBefore = _balance(stETH);
+        uint256 _trancheBalance = _balance(tranche);
+
+        // fix amount
+        if (_trancheBalance < _trancheAmount) {
+            _trancheAmount = _trancheBalance;
+        }
 
         // withraw tranche and get steth
         super._withdrawTranche(_trancheAmount);
@@ -121,23 +123,27 @@ contract StEthTrancheStrategy is TrancheStrategy {
     {
         // underlying token of steth cdo is steth
         uint256 balancesInStEth = _getTrancheBalanceInUnderlying(_tranche);
-        (uint256 stEthPrice, ) = priceFeed.safe_price();
+        (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
+        require(isSafe, "strat/price-feed-unsafe");
 
         return balancesInStEth.mul(stEthPrice).div(_EXP_SCALE);
     }
 
     /// @dev convert `wantAmount` denominated in `tranche`
+    /// NOTE: underlying token is equal to steth here
     function _wantsInTranche(IERC20 _tranche, uint256 wantAmount)
         internal
         view
         override
         returns (uint256)
     {
-        (uint256 stEthPrice, ) = priceFeed.safe_price();
+        (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
+        require(isSafe, "strat/price-feed-unsafe");
 
-        uint256 uTokensInTranche =
-            _underlyingTokensInTranche(_tranche, wantAmount);
-        return uTokensInTranche.mul(_EXP_SCALE).div(stEthPrice);
+        // wantAmount to stEthAmount (underlyingAmount)
+        uint256 stEthAmount = wantAmount.mul(_EXP_SCALE).div(stEthPrice);
+        // underlying to tranche amount
+        return _underlyingTokensInTranche(_tranche, stEthAmount);
     }
 
     function updateMaxSlippage(uint256 _maximumSlippage) external onlyKeepers {

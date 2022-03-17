@@ -9,8 +9,7 @@ import {
 import {
     SafeERC20,
     SafeMath,
-    IERC20,
-    Address
+    IERC20
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/idle/IIdleCDO.sol";
@@ -20,7 +19,6 @@ import "../interfaces/IWETH.sol";
 
 contract TrancheStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
-    using Address for address;
     using SafeMath for uint256;
 
     uint256 internal immutable _EXP_SCALE;
@@ -106,6 +104,10 @@ contract TrancheStrategy is BaseStrategy {
             );
     }
 
+    function trancheBalanceInWant() external view returns (uint256) {
+        return _getTrancheBalanceInWant(tranche);
+    }
+
     /**
      * Perform any Strategy unwinding or other calls necessary to capture the
      * "free return" this Strategy has generated since the last time its core
@@ -153,40 +155,45 @@ contract TrancheStrategy is BaseStrategy {
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
         // should be true if working greatly
-        if (totalAssets >= debt) {
+        if (debt < totalAssets) {
+            //profit
             _profit = totalAssets.sub(debt);
-            // amounts of want should be withdrawn
-            uint256 toWithdraw = _profit.add(_debtOutstanding); // totalAssets - totalDebt + debtOutstanding
+        } else {
+            _loss = debt.sub(totalAssets);
+        }
 
-            if (toWithdraw > wantBal) {
-                //we step our withdrawals.
-                uint256 withdrawn =
-                    _divest(_wantsInTranche(_tranche, toWithdraw));
-                if (withdrawn < toWithdraw) {
-                    _loss = toWithdraw.sub(withdrawn);
-                }
+        uint256 toWithdraw = _debtOutstanding.add(_profit);
+
+        if (toWithdraw > wantBal) {
+            // (wantBal + wantInvested) - totalDebt + debtOutstanding - wantBal
+            toWithdraw = toWithdraw.sub(wantBal);
+            uint256 withdrawn = _divest(_wantsInTranche(_tranche, toWithdraw));
+
+            uint256 withdrawalLoss;
+            if (withdrawn < toWithdraw) {
+                withdrawalLoss = toWithdraw.sub(withdrawn);
             }
-            wantBal = _balance(_want);
 
-            //net off profit and loss
-            if (_profit >= _loss) {
-                _profit = _profit - _loss; // totalAssets - totalDebt - loss
-                _loss = 0;
+            //when we withdraw we can lose money in the withdrawal
+            if (withdrawalLoss < _profit) {
+                _profit = _profit.sub(withdrawalLoss);
             } else {
+                // Add withdrawal loss to loss, cancel profit
+                _loss = _loss.add(withdrawalLoss.sub(_profit));
                 _profit = 0;
-                _loss = _loss - _profit;
             }
 
-            //profit + _debtOutstanding must be <= wantbalance. Prioritise profit first
+            wantBal = want.balanceOf(address(this));
+
+            // profit + _debtOutstanding must be <= wantbalance. Prioritise profit first
             if (wantBal < _profit) {
                 _profit = wantBal;
-            } else if (wantBal < toWithdraw) {
+                _debtPayment = 0;
+            } else if (wantBal < _debtOutstanding.add(_profit)) {
                 _debtPayment = wantBal.sub(_profit);
             } else {
                 _debtPayment = _debtOutstanding;
             }
-        } else {
-            _loss = debt.sub(totalAssets);
         }
     }
 
@@ -367,16 +374,20 @@ contract TrancheStrategy is BaseStrategy {
         wantRedeemed = _balance(_want).sub(before);
     }
 
-    // /// @notice
-    // /// @param _trancheAmount amount of `tranche` to stake
-    // function _stake(uint256 _trancheAmount) internal returns (uint256) {
-    //     IERC20 _tranche = tranche;
+    /// @notice stake tranches
+    /// @param _trancheAmount amount of `tranche` to stake
+    function _stake(uint256 _trancheAmount)
+        internal
+        virtual
+        returns (uint256)
+    {}
 
-    //     idleCDO.stake();
-    // }
-
+    /// @notice claim liquidity mining rewards
     function _claimRewards() internal virtual {}
 
+    /// @notice deposit specified underlying amount to idleCDO and mint tranche
+    /// @dev when `want` is different from CDO underlying token, this method will be overridden by pararent contract
+    /// @param _underlyingAmount underlying amount of idleCDO
     function _depositTranche(uint256 _underlyingAmount) internal virtual {
         function(uint256) external returns (uint256) _depositXX =
             isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
@@ -384,6 +395,9 @@ contract TrancheStrategy is BaseStrategy {
         _depositXX(_underlyingAmount);
     }
 
+    /// @notice redeem tranches and get `want`
+    /// @dev when `want` is different from CDO underlying token, this method will be overridden by pararent contract
+    /// @param _trancheAmount amount of `tranche`
     function _withdrawTranche(uint256 _trancheAmount) internal virtual {
         function(uint256) external returns (uint256) _withdrawXX =
             isAATranche ? idleCDO.withdrawAA : idleCDO.withdrawBB;
@@ -431,7 +445,7 @@ contract TrancheStrategy is BaseStrategy {
         return _underlyingTokensInTranche(_tranche, wantAmount);
     }
 
-    /// @dev convert `underlyingTokens` denominated in `tranche`
+    /// @dev convert `underlyingTokens` to `tranche`
     function _underlyingTokensInTranche(
         IERC20 _tranche,
         uint256 underlyingTokens

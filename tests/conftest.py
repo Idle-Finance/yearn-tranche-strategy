@@ -40,3 +40,15 @@ def keeper(accounts):
 @pytest.fixture
 def sushiswap_router():
     yield Contract("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
+
+
+@pytest.fixture
+def weth():
+    yield Contract("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+
+
+@pytest.fixture
+def weth_amout(user, weth):
+    weth_amout = 10 ** weth.decimals()
+    user.transfer(weth, weth_amout)
+    yield weth_amout

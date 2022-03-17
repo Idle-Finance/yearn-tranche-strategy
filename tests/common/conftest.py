@@ -20,6 +20,7 @@ STRATEGY_CONFIGS = {
     #     "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
     #     "token_address": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA  ",
     #     "amount": 10000 * 1e18
+    #     "strategy": "TrancheStrategy"
     # },
 }
 
@@ -41,13 +42,6 @@ def token(strategy_config):
 @pytest.fixture
 def idleCDO(strategy_config):
     yield Contract(strategy_config["idleCDO"]['address'])
-
-
-@pytest.fixture
-def tranche(idleCDO, strategy_config):
-    tranche_address = idleCDO.AATranche(
-    ) if strategy_config['tranche_type'] == 'AA' else idleCDO.BBTranche()
-    yield Contract(tranche_address)
 
 
 @pytest.fixture
