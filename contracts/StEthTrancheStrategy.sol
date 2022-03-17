@@ -13,9 +13,9 @@ import {
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "./Strategy.sol";
+import "./TrancheStrategy.sol";
 
-contract StEthTrancheStrategy is Strategy {
+contract StEthTrancheStrategy is TrancheStrategy {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
@@ -51,7 +51,7 @@ contract StEthTrancheStrategy is Strategy {
         IIdleCDO _idleCDO,
         bool _isAATranche,
         IUniswapV2Router02 _router
-    ) public Strategy(_vault, _idleCDO, _isAATranche, _router) {
+    ) public TrancheStrategy(_vault, _idleCDO, _isAATranche, _router) {
         require(address(want) == address(WETH), "strat/want-ne-weth");
         require(_idleCDO.token() == address(stETH), "strat/cdo-steth");
 

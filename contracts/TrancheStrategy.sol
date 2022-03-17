@@ -18,7 +18,7 @@ import "../interfaces/uniswap/IUniswapV2Router02.sol";
 import "../interfaces/IERC20Metadata.sol";
 import "../interfaces/IWETH.sol";
 
-contract Strategy is BaseStrategy {
+contract TrancheStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;

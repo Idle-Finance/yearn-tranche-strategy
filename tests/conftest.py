@@ -144,13 +144,13 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, Strategy, StEthTrancheStrategy):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, StEthTrancheStrategy):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     if strategy_config['strategy'] == 'StEthTrancheStrategy':
         _Strategy = StEthTrancheStrategy
     else:
-        _Strategy = Strategy
+        _Strategy = TrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
         _Strategy, vault, idleCDO, is_AA, sushiswap_router
