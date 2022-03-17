@@ -13,7 +13,7 @@ import {
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "./TrancheStrategy.sol";
+import "./Strategy.sol";
 
 contract StEthTrancheStrategy is TrancheStrategy {
     using SafeERC20 for IERC20;
@@ -94,15 +94,18 @@ contract StEthTrancheStrategy is TrancheStrategy {
         return _amount;
     }
 
+    /// @dev override default behavior
+    /// @notice
     function _getTrancheBalanceInWant(IERC20 _tranche)
         internal
         view
         override
         returns (uint256)
     {
+        // underlying token of steth cdo is steth
         uint256 balancesInStEth = _getTrancheBalanceInUnderlying(_tranche);
-
         (uint256 stEthPrice, ) = priceFeed.safe_price();
+
         return balancesInStEth.mul(stEthPrice).div(_EXP_SCALE);
     }
 

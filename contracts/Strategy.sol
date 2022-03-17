@@ -100,10 +100,9 @@ contract TrancheStrategy is BaseStrategy {
         returns (uint256)
     {
         // TODO: Build a more accurate estimate using the value of all positions in terms of `want`
-        IERC20Metadata _tranche = tranche;
         return
             want.balanceOf(address(this)).add(
-                _getTrancheBalanceInWant(_tranche)
+                _getTrancheBalanceInWant(tranche)
             );
     }
 
@@ -146,6 +145,8 @@ contract TrancheStrategy is BaseStrategy {
         // NOTE: Should try to free up at least `_debtOutstanding` of underlying position
         IERC20 _want = want;
         IERC20 _tranche = tranche;
+
+        _claimRewards();
 
         uint256 wantBal = _balance(_want);
         uint256 totalAssets = wantBal.add(_getTrancheBalanceInWant(_tranche));
@@ -202,8 +203,10 @@ contract TrancheStrategy is BaseStrategy {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
         uint256 wantBal = _balance(want);
-        if (wantBal != 0) {
-            _invest(wantBal);
+
+        if (wantBal > _debtOutstanding) {
+            uint256 amountToDeposit = wantBal.sub(_debtOutstanding);
+            _invest(amountToDeposit);
         }
     }
 
@@ -247,7 +250,7 @@ contract TrancheStrategy is BaseStrategy {
     {
         // TODO: Liquidate all positions and return the amount freed.
         uint256 trancheBalance = _balance(tranche);
-        liquidatePosition(trancheBalance); // @note wantBalance diff ?
+        _divest(trancheBalance);
         amountFreed = _balance(want);
     }
 
@@ -314,15 +317,17 @@ contract TrancheStrategy is BaseStrategy {
             return 0;
         }
 
-        address wethAddress = address(WETH);
-        if (address(want) == wethAddress) {
+        address WETH_ADDRESS = address(WETH);
+        address _want = address(want);
+
+        if (_want == WETH_ADDRESS) {
             return _amount;
         }
 
         uint256[] memory amounts =
             router.getAmountsOut(
                 _amount,
-                _getTokenOutPathV2(wethAddress, address(want))
+                _getTokenOutPathV2(WETH_ADDRESS, _want)
             );
 
         return amounts[amounts.length - 1];
@@ -369,6 +374,8 @@ contract TrancheStrategy is BaseStrategy {
 
     //     idleCDO.stake();
     // }
+
+    function _claimRewards() internal virtual {}
 
     function _depositTranche(uint256 _wantAmount) internal virtual {
         function(uint256) external returns (uint256) _depositXX =
@@ -442,8 +449,8 @@ contract TrancheStrategy is BaseStrategy {
         returns (address[] memory _path)
     {
         require(_tokenIn != _tokenOut, "strat/identical-address");
-        address wethAddress = address(WETH);
-        bool isWeth = _tokenIn == wethAddress || _tokenOut == wethAddress;
+        address WETH_ADDRESS = address(WETH);
+        bool isWeth = _tokenIn == WETH_ADDRESS || _tokenOut == WETH_ADDRESS;
 
         if (isWeth) {
             _path = new address[](2);
@@ -452,7 +459,7 @@ contract TrancheStrategy is BaseStrategy {
         } else {
             _path = new address[](3);
             _path[0] = _tokenIn;
-            _path[1] = wethAddress;
+            _path[1] = WETH_ADDRESS;
             _path[2] = _tokenOut;
         }
     }
