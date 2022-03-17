@@ -37,11 +37,11 @@ def idleCDO(strategy_config):
     yield Contract(strategy_config["idleCDO"]['address'])
 
 
-@pytest.fixture
-def tranche(idleCDO, strategy_config):
-    tranche_address = idleCDO.AATranche(
-    ) if strategy_config['tranche_type'] == 'AA' else idleCDO.BBTranche()
-    yield Contract(tranche_address)
+# @pytest.fixture
+# def tranche(idleCDO, strategy_config):
+#     tranche_address = idleCDO.AATranche(
+#     ) if strategy_config['tranche_type'] == 'AA' else idleCDO.BBTranche()
+#     yield Contract(tranche_address)
 
 
 @pytest.fixture

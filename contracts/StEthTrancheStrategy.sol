@@ -60,21 +60,42 @@ contract StEthTrancheStrategy is TrancheStrategy {
         stETH.approve(address(stableSwapSTETH), type(uint256).max);
     }
 
-    function _depositTranche(uint256 _wantAmount) internal override {
-        // weth => eth => steth
-        WETH.withdraw(_wantAmount);
-        _mintStEth(_wantAmount);
+    /// @notice deposit steth to idleCDO and mint tranche
+    /// @param _amount eth amount to invest
+    function _depositTranche(uint256 _amount) internal override {
+        uint256 _stEthBalanceBefore = _balance(stETH);
+
+        // weth => eth
+        WETH.withdraw(_amount);
+
+        // eth => steth
+        // test if we should buy instead of mint
+        uint256 out = stableSwapSTETH.get_dy(WETHID, STETHID, _amount);
+        if (out < _amount) {
+            stETH.submit{ value: _amount }(REFERRAL);
+        } else {
+            stableSwapSTETH.exchange{ value: _amount }(
+                WETHID,
+                STETHID,
+                _amount,
+                _amount
+            );
+        }
+        uint256 amountIn = _balance(stETH).sub(_stEthBalanceBefore);
+
         // deposit steth to idle
-        super._depositTranche(_wantAmount);
+        super._depositTranche(amountIn);
     }
 
+    /// @notice redeem tranches and get steth
+    /// @param _trancheAmount tranche amount to redeem
     function _withdrawTranche(uint256 _trancheAmount) internal override {
         uint256 _stEthBalanceBefore = _balance(stETH);
 
         // withraw tranche and get steth
         super._withdrawTranche(_trancheAmount);
 
-        uint256 _amountIn = _stEthBalanceBefore.sub(_balance(stETH));
+        uint256 _amountIn = _balance(stETH).sub(_stEthBalanceBefore);
 
         // steth => eth
         uint256 slippageAllowance =
@@ -83,10 +104,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
         // eth => weth
         WETH.deposit{ value: address(this).balance }();
-    }
-
-    function _mintStEth(uint256 _ethAmount) private returns (uint256 shares) {
-        shares = stETH.submit{ value: _ethAmount }(REFERRAL);
     }
 
     /// @dev NOTE: Unreliable price

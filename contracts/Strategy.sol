@@ -377,11 +377,11 @@ contract TrancheStrategy is BaseStrategy {
 
     function _claimRewards() internal virtual {}
 
-    function _depositTranche(uint256 _wantAmount) internal virtual {
+    function _depositTranche(uint256 _underlyingAmount) internal virtual {
         function(uint256) external returns (uint256) _depositXX =
             isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
 
-        _depositXX(_wantAmount);
+        _depositXX(_underlyingAmount);
     }
 
     function _withdrawTranche(uint256 _trancheAmount) internal virtual {
