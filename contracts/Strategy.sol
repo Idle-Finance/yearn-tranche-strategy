@@ -17,6 +17,8 @@ import "../interfaces/uniswap/IUniswapV2Router02.sol";
 import "../interfaces/IERC20Metadata.sol";
 import "../interfaces/IWETH.sol";
 
+/// @title Base Tranche Strategy
+/// @author bakuchi
 contract TrancheStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;

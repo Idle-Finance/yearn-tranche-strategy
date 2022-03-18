@@ -11,7 +11,8 @@ STRATEGY_CONFIGS = {
         "tranche_type": "AA",
         # Axie Infinity: Ronin Bridge
         "whale": "0x1A2a1c938CE3eC39b6D47113c7955bAa9DD454F2",
-        "token_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",  # weth
+        # want address (weth)
+        "token_address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
         "amount": 100 * 1e18,  # 100 ETH
         "strategy": "StEthTrancheStrategy"  # strategy contract name
     },
@@ -53,6 +54,18 @@ def underlying_token(strategy_config):
 
 
 @pytest.fixture
+def dai(accounts, user):
+    reserve = accounts.at(
+        "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf", force=True)
+    dai = Contract("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+    amount = 1000 * 1e18
+    dai.transfer(
+        user, amount, {"from": reserve}
+    )
+    yield dai
+
+
+@pytest.fixture
 def amount(accounts, token, user, strategy_config):
     # In order to get some funds for the token you are about to use,
     # it impersonate an exchange address to use it's funds.
@@ -62,6 +75,12 @@ def amount(accounts, token, user, strategy_config):
         user, amount, {"from": reserve}
     )
     yield amount
+
+
+@pytest.fixture
+def whale(accounts, strategy_config):
+    whale = accounts.at(strategy_config["whale"], force=True)
+    yield whale
 
 
 @pytest.fixture

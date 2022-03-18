@@ -14,6 +14,8 @@ import {
 
 import "./Strategy.sol";
 
+/// @title StETH Tranche Strategy
+/// @author bakuchi
 contract StEthTrancheStrategy is TrancheStrategy {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;

@@ -1,6 +1,4 @@
 import pytest
-from brownie import Contract
-STETH_STABLE_SWAP = "0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"
 
 
 def test_revoke_strategy_from_vault(
@@ -25,7 +23,8 @@ def test_revoke_strategy_from_vault(
     # the next line don't pass because this strategy is affected by slippage when swapping
     # assert pytest.approx(token.balanceOf(vault.address), el=RELATIVE_APPROX) == price * amount / 1e18
     assert withdrawnAmount >= amount * 0.995
-    assert token.balanceOf(vault.address) >= amount * 0.995  # 0.5% max slippage
+    assert token.balanceOf(vault) >= amount * \
+        0.995  # 0.5% max slippage
     assert underlying_token.balanceOf(strategy) <= 2
 
 
@@ -52,5 +51,6 @@ def test_revoke_strategy_from_strategy(
     # the next line don't pass because this strategy is affected by slippage when swapping
     # assert pytest.approx(token.balanceOf(vault.address), el=RELATIVE_APPROX) == price * amount / 1e18
     assert withdrawnAmount >= amount * 0.995
-    assert token.balanceOf(vault.address) >= amount * 0.995  # 0.5% max slippage
+    assert token.balanceOf(vault) >= amount * \
+        0.995  # 0.5% max slippage
     assert underlying_token.balanceOf(strategy) <= 2
