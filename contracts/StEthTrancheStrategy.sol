@@ -36,6 +36,8 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
     uint256 public maximumSlippage = 50; //out of 10000. 50 = 0.5%
 
+    event UpdateMaxSlippage(uint256 _oldSlippage, uint256 _newSlippage);
+
     receive() external payable {
         require(
             msg.sender == address(WETH) ||
@@ -148,8 +150,12 @@ contract StEthTrancheStrategy is TrancheStrategy {
         return _underlyingTokensInTranche(_tranche, stEthAmount);
     }
 
-    function updateMaxSlippage(uint256 _maximumSlippage) external onlyKeepers {
+    function setMaxSlippage(uint256 _maximumSlippage) external onlyKeepers {
         require(_maximumSlippage <= DENOMINATOR, "strat/invalid-slippage");
+
+        uint256 oldMaximumSlippage = maximumSlippage;
         maximumSlippage = _maximumSlippage;
+
+        emit UpdateMaxSlippage(oldMaximumSlippage, _maximumSlippage);
     }
 }

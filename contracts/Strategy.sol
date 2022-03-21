@@ -149,6 +149,7 @@ contract TrancheStrategy is BaseStrategy {
         // NOTE: Should try to free up at least `_debtOutstanding` of underlying position
         IERC20 _want = want;
         IERC20 _tranche = tranche;
+        _debtPayment = _debtOutstanding;
 
         _claimRewards();
 
@@ -158,7 +159,7 @@ contract TrancheStrategy is BaseStrategy {
 
         // should be true if working greatly
         if (debt < totalAssets) {
-            //profit
+            // profit
             _profit = totalAssets.sub(debt);
         } else {
             _loss = debt.sub(totalAssets);
@@ -176,7 +177,7 @@ contract TrancheStrategy is BaseStrategy {
                 withdrawalLoss = toWithdraw.sub(withdrawn);
             }
 
-            //when we withdraw we can lose money in the withdrawal
+            // when we withdraw we can lose money in the withdrawal
             if (withdrawalLoss < _profit) {
                 _profit = _profit.sub(withdrawalLoss);
             } else {
@@ -193,8 +194,6 @@ contract TrancheStrategy is BaseStrategy {
                 _debtPayment = 0;
             } else if (wantBal < _debtOutstanding.add(_profit)) {
                 _debtPayment = wantBal.sub(_profit);
-            } else {
-                _debtPayment = _debtOutstanding;
             }
         }
     }
@@ -349,6 +348,7 @@ contract TrancheStrategy is BaseStrategy {
     /// @return trancheMinted : tranche tokens minted
     function _invest(uint256 _wantAmount)
         internal
+        virtual
         returns (uint256 trancheMinted)
     {
         IERC20 _tranche = tranche;
@@ -365,6 +365,7 @@ contract TrancheStrategy is BaseStrategy {
     /// @return wantRedeemed : want redeemed
     function _divest(uint256 _trancheAmount)
         internal
+        virtual
         returns (uint256 wantRedeemed)
     {
         IERC20 _want = want;
@@ -379,6 +380,14 @@ contract TrancheStrategy is BaseStrategy {
     /// @notice stake tranches
     /// @param _trancheAmount amount of `tranche` to stake
     function _stake(uint256 _trancheAmount)
+        internal
+        virtual
+        returns (uint256)
+    {}
+
+    /// @notice unstake tranches
+    /// @param _trancheAmount amount of `tranche` to unstake
+    function _unstake(uint256 _trancheAmount)
         internal
         virtual
         returns (uint256)
