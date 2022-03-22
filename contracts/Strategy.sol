@@ -264,7 +264,7 @@ contract TrancheStrategy is BaseStrategy {
 
     // NOTE: Can override `tendTrigger` and `harvestTrigger` if necessary
 
-    function prepareMigration(address _newStrategy) internal override {
+    function prepareMigration(address _newStrategy) internal virtual override {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
         IERC20 _tranche = tranche;

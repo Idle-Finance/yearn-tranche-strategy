@@ -1,4 +1,4 @@
-from brownie import brownie
+import brownie
 
 
 def test_update(

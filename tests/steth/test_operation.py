@@ -154,11 +154,9 @@ def test_change_debt(
 
     # In order to pass this tests, you will need to implement prepareReturn.
     # TODO: uncomment the following lines.
-    estimatedTotalAssetsBefore = strategy.estimatedTotalAssets()
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     chain.sleep(1)
     tx = strategy.harvest()
-    tokens_sold = tx.events["TokenExchange"]['tokens_sold']
 
     (price, _) = steth_price_feed.current_price()
     assert 0.995 * half <= strategy.estimatedTotalAssets() <= price * half / 1e18
