@@ -43,6 +43,7 @@ The following methods should be overrode in parent contact:
 - `_getTrancheBalanceInWant()`
 
 ### StEthTrancheStrategy
+
 Stakes WETH on Lido.fi to mint stETH which accumulates ETH 2.0 staking rewards. This strategy will buy stETH off the market if it is cheaper than staking. And then deposit the stETH to Idle StETH Perpetual Tranche.
 
 ## Getting Started

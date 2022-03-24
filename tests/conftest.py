@@ -52,3 +52,14 @@ def weth_amout(user, weth):
     weth_amout = 10 ** weth.decimals()
     user.transfer(weth, weth_amout)
     yield weth_amout
+
+
+@pytest.fixture
+def trade_factory():
+    # yield Contract("0xBf26Ff7C7367ee7075443c4F95dEeeE77432614d")s
+    yield Contract("0x99d8679bE15011dEAD893EB4F5df474a4e6a8b29")
+
+
+@pytest.fixture
+def ymechs_safe():
+    yield Contract("0x2C01B4AD51a67E2d8F02208F54dF9aC4c0B778B6")

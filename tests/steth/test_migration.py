@@ -19,6 +19,7 @@ def test_migration(
     strategy_config,
     sushiswap_router,
     steth_price_feed,
+    multi_rewards,
     RELATIVE_APPROX,
 ):
     # Deposit to the vault and harvest
@@ -34,7 +35,7 @@ def test_migration(
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        StEthTrancheStrategy, vault, idleCDO, is_AA, sushiswap_router)
+        StEthTrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards)
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
     assert (
         pytest.approx(new_strategy.estimatedTotalAssets(),

@@ -1,3 +1,4 @@
+from posixpath import isabs
 import pytest
 from brownie import config, Contract
 
@@ -94,17 +95,29 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, StEthTrancheStrategy):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, StEthTrancheStrategy, multi_rewards, ymechs_safe):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = StEthTrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        _Strategy, vault, idleCDO, is_AA, sushiswap_router
+        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
+    trade_factory.grantRole(
+        trade_factory.STRATEGY(), strategy, {"from": ymechs_safe}
+    )
     yield strategy
+
+
+@pytest.fixture
+def multi_rewards(MultiRewards, idleCDO, strategy_config, gov):
+    is_AA = strategy_config['tranche_type'] == 'AA'
+    multi_rewards = gov.deploy(
+        MultiRewards, idleCDO.AATranche() if is_AA else idleCDO.BBTranche()
+    )
+    yield multi_rewards
 
 
 @pytest.fixture(scope="session")
