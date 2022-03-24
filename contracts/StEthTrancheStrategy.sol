@@ -50,13 +50,25 @@ contract StEthTrancheStrategy is TrancheStrategy {
         address _vault,
         IIdleCDO _idleCDO,
         bool _isAATranche,
-        IUniswapV2Router02 _router
-    ) public TrancheStrategy(_vault, _idleCDO, _isAATranche, _router) {
+        IUniswapV2Router02 _router,
+        IERC20[] memory _rewardTokens,
+        IMultiRewards _multiRewards
+    )
+        public
+        TrancheStrategy(
+            _vault,
+            _idleCDO,
+            _isAATranche,
+            _router,
+            _rewardTokens,
+            _multiRewards
+        )
+    {
         require(address(want) == address(WETH), "strat/want-ne-weth");
         require(_idleCDO.token() == address(stETH), "strat/cdo-steth");
 
         WETH.approve(address(stETH), type(uint256).max);
-        stETH.approve(address(idleCDO), type(uint256).max);
+        stETH.approve(address(_idleCDO), type(uint256).max);
         stETH.approve(address(stableSwapSTETH), type(uint256).max);
     }
 

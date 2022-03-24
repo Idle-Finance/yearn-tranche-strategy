@@ -14,10 +14,11 @@ See the [Idle Perpetual Tranche README](https://github.com/Idle-Labs/idle-tranch
 ### TrancheStrategy
 TrancheStrategy is a base strategy contract.
 This strategy is used when vault `want` is equal to `tranche` underlying.
-
-Some methods should be overrode in parent contact:
+The following methods should be overrode in parent contact.
 
 #### Core Deposit/Withdraw Logic
+
+The following methods should be overrode in parent contact:
 
 - `_invest()`
 - `_dinvest()`
@@ -25,13 +26,18 @@ Some methods should be overrode in parent contact:
 - `_depositTranche()`
 - `_withdrawTranche()`
 
-#### Stake/Unstake Logic
+#### Claiming Rewards
 
-- `_stake()`
-- `_unstake()`
+To sell claimed rewards, this contract makes use of [ySwaps](https://github.com/yearn/yswaps/blob/main/).
+ySwap's idea is to give a yearn maintained swapper permissions to pull reward tokens from the strategy. The selling of tokens will be outsourced to ySwaps and the want will be airdropped back to the strategy asynchronously.
+
+The following methods should be overrode in parent contact:
+
 - `_claimRewards()`
 
 #### View Functions
+
+The following methods should be overrode in parent contact:
 
 - `_wantsInTranche()`
 - `_getTrancheBalanceInWant()`

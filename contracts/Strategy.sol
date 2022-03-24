@@ -13,7 +13,9 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/idle/IIdleCDO.sol";
+import "../interfaces/idle/IMultiRewards.sol";
 import "../interfaces/uniswap/IUniswapV2Router02.sol";
+import "../interfaces/yswap/ITradeFactory.sol";
 import "../interfaces/IERC20Metadata.sol";
 import "../interfaces/IWETH.sol";
 
@@ -25,22 +27,32 @@ contract TrancheStrategy is BaseStrategy {
 
     uint256 internal immutable _EXP_SCALE;
 
-    IWETH public constant WETH =
+    IWETH internal constant WETH =
         IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     IERC20Metadata public immutable tranche;
 
-    IIdleCDO public idleCDO;
+    IIdleCDO public immutable idleCDO;
 
     IUniswapV2Router02 public router;
 
+    IMultiRewards public multiRewards;
+
     bool public immutable isAATranche;
+
+    bool public enabledStake;
+
+    address public tradeFactory;
+
+    IERC20[] public rewardTokens;
 
     constructor(
         address _vault,
         IIdleCDO _idleCDO,
         bool _isAATranche,
-        IUniswapV2Router02 _router
+        IUniswapV2Router02 _router,
+        IERC20[] memory _rewardTokens,
+        IMultiRewards _multiRewards
     ) public BaseStrategy(_vault) {
         require(address(_router) != address(0), "strat/zero-address");
         // TODO:
@@ -51,6 +63,8 @@ contract TrancheStrategy is BaseStrategy {
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
         router = _router;
+        rewardTokens = _rewardTokens;
+        multiRewards = _multiRewards;
 
         IERC20Metadata _tranche =
             IERC20Metadata(
@@ -60,6 +74,88 @@ contract TrancheStrategy is BaseStrategy {
         _EXP_SCALE = 10**uint256(_tranche.decimals());
 
         want.safeApprove(address(_idleCDO), type(uint256).max);
+    }
+
+    // ******** PERMISSIONED METHODS ************
+    /// @notice enable staking
+    function enableStaking() external onlyVaultManagers {
+        require(tradeFactory != address(0), "strat/tf-zero"); // first set tradeFactory
+        enabledStake = true;
+    }
+
+    /// @notice withdraw staked and disable staking
+    function disableStaking() external onlyVaultManagers {
+        enabledStake = false;
+        IMultiRewards _multiRewards = multiRewards;
+        // withdrawing amount 0 will cause to revert
+        if (_multiRewards.balanceOf(address(this)) != 0) {
+            _multiRewards.exit();
+        }
+    }
+
+    /// @notice set reward tokens
+    /// @dev caller must have STRATEGY role if `tradeFactory` is non-zero address : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    function setRewardTokens(IERC20[] memory _rewardTokens)
+        external
+        onlyVaultManagers
+    {
+        bool useTradeFactory = tradeFactory != address(0);
+
+        if (useTradeFactory) {
+            _revokeTradeFactoryPermissions();
+        }
+
+        rewardTokens = _rewardTokens;
+
+        if (useTradeFactory) {
+            _approveTradeFactory();
+        }
+    }
+
+    /// @dev caller must have STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    function updateTradeFactory(address _newTradeFactory)
+        public
+        onlyGovernance
+    {
+        if (tradeFactory != address(0)) {
+            _revokeTradeFactoryPermissions();
+        }
+
+        tradeFactory = _newTradeFactory;
+
+        if (_newTradeFactory != address(0)) {
+            _approveTradeFactory();
+        }
+    }
+
+    /// @notice setup tradeFactory
+    /// @dev assume tradeFactory is not zero address
+    ///      caller must have STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    function _approveTradeFactory() internal {
+        IERC20[] memory _rewardTokens = rewardTokens;
+        address _want = address(want);
+        ITradeFactory tf = ITradeFactory(tradeFactory);
+
+        uint256 length = _rewardTokens.length;
+        IERC20 _rewardToken;
+        for (uint256 i; i < length; i++) {
+            _rewardToken = _rewardTokens[i];
+            _rewardToken.safeApprove(address(tradeFactory), type(uint256).max);
+            tf.enable(address(_rewardToken), _want);
+        }
+    }
+
+    /// @notice remove tradeFactory
+    /// @dev assume tradeFactory is not zero address
+    ///      caller must have STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    function _revokeTradeFactoryPermissions() internal {
+        address _tradeFactory = tradeFactory;
+        IERC20[] memory _rewardTokens = rewardTokens;
+        uint256 length = _rewardTokens.length;
+
+        for (uint256 i; i < length; i++) {
+            _rewardTokens[i].safeApprove(_tradeFactory, 0);
+        }
     }
 
     // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
@@ -263,11 +359,18 @@ contract TrancheStrategy is BaseStrategy {
     }
 
     // NOTE: Can override `tendTrigger` and `harvestTrigger` if necessary
-
     function prepareMigration(address _newStrategy) internal virtual override {
         // TODO: Transfer any non-`want` tokens to the new strategy
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
         IERC20 _tranche = tranche;
+
+        IMultiRewards _multiRewards = multiRewards;
+
+        // withdrawing amount 0 will cause to revert
+        if (enabledStake && _multiRewards.balanceOf(address(this)) != 0) {
+            _multiRewards.exit();
+        }
+
         uint256 trancheBalance = _balance(_tranche);
         if (trancheBalance != 0) {
             _tranche.safeTransfer(_newStrategy, trancheBalance);
@@ -358,6 +461,10 @@ contract TrancheStrategy is BaseStrategy {
         _depositTranche(_wantAmount);
 
         trancheMinted = _balance(_tranche).sub(before);
+
+        if (enabledStake && trancheMinted != 0) {
+            multiRewards.stake(trancheMinted);
+        }
     }
 
     /// @notice redeem `tranche` from IdleCDO and withdraw `want`
@@ -370,6 +477,17 @@ contract TrancheStrategy is BaseStrategy {
     {
         IERC20 _want = want;
 
+        if (enabledStake) {
+            IMultiRewards _multiRewards = multiRewards;
+
+            uint256 stakedBal = _multiRewards.balanceOf(address(this));
+            uint256 trancheBal = _balance(tranche);
+
+            // if current balance > staked balance, withdraw
+            if (_trancheAmount > trancheBal)
+                _multiRewards.withdraw(_trancheAmount - trancheBal); // no underflow
+        }
+
         uint256 before = _balance(_want);
 
         _withdrawTranche(_trancheAmount);
@@ -377,24 +495,26 @@ contract TrancheStrategy is BaseStrategy {
         wantRedeemed = _balance(_want).sub(before);
     }
 
-    /// @notice stake tranches
-    /// @param _trancheAmount amount of `tranche` to stake
-    function _stake(uint256 _trancheAmount)
-        internal
-        virtual
-        returns (uint256)
-    {}
+    // /// @notice stake tranches
+    // /// @param _trancheAmount amount of `tranche` to stake
+    // function _stake(uint256 _trancheAmount)
+    //     internal
+    //     virtual
+    //     returns (uint256)
+    // {}
 
-    /// @notice unstake tranches
-    /// @param _trancheAmount amount of `tranche` to unstake
-    function _unstake(uint256 _trancheAmount)
-        internal
-        virtual
-        returns (uint256)
-    {}
+    // /// @notice unstake tranches
+    // /// @param _trancheAmount amount of `tranche` to unstake
+    // function _unstake(uint256 _trancheAmount)
+    //     internal
+    //     virtual
+    //     returns (uint256)
+    // {}
 
     /// @notice claim liquidity mining rewards
-    function _claimRewards() internal virtual {}
+    function _claimRewards() internal virtual {
+        multiRewards.getReward();
+    }
 
     /// @notice deposit specified underlying amount to idleCDO and mint tranche
     /// @dev when `want` is different from CDO underlying token, this method will be overridden by pararent contract
