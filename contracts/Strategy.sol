@@ -196,14 +196,10 @@ contract TrancheStrategy is BaseStrategy {
         returns (uint256)
     {
         // TODO: Build a more accurate estimate using the value of all positions in terms of `want`
-        return
-            want.balanceOf(address(this)).add(
-                _getTrancheBalanceInWant(tranche)
-            );
-    }
-
-    function trancheBalanceInWant() external view returns (uint256) {
-        return _getTrancheBalanceInWant(tranche);
+        IERC20 _tranche = tranche;
+        uint256 totalTranches =
+            multiRewards.balanceOf(address(this)).add(_balance(_tranche));
+        return _tranchesInWant(_tranche, totalTranches);
     }
 
     /**
@@ -250,7 +246,7 @@ contract TrancheStrategy is BaseStrategy {
         _claimRewards();
 
         uint256 wantBal = _balance(_want);
-        uint256 totalAssets = wantBal.add(_getTrancheBalanceInWant(_tranche));
+        uint256 totalAssets = estimatedTotalAssets();
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
         // should be true if working greatly
@@ -495,22 +491,6 @@ contract TrancheStrategy is BaseStrategy {
         wantRedeemed = _balance(_want).sub(before);
     }
 
-    // /// @notice stake tranches
-    // /// @param _trancheAmount amount of `tranche` to stake
-    // function _stake(uint256 _trancheAmount)
-    //     internal
-    //     virtual
-    //     returns (uint256)
-    // {}
-
-    // /// @notice unstake tranches
-    // /// @param _trancheAmount amount of `tranche` to unstake
-    // function _unstake(uint256 _trancheAmount)
-    //     internal
-    //     virtual
-    //     returns (uint256)
-    // {}
-
     /// @notice claim liquidity mining rewards
     function _claimRewards() internal virtual {
         multiRewards.getReward();
@@ -541,28 +521,26 @@ contract TrancheStrategy is BaseStrategy {
         balance = _token.balanceOf(address(this));
     }
 
-    /// @dev get tranche balances in this contract holds denominated in `want`
+    /// @dev convert `tranches` denominated in `want`
     /// @notice Usually idleCDO.underlyingToken is equal to the `want`
-    function _getTrancheBalanceInWant(IERC20 _tranche)
+    function _tranchesInWant(IERC20 _tranche, uint256 trancheAmount)
         internal
         view
         virtual
         returns (uint256)
     {
-        return _getTrancheBalanceInUnderlying(_tranche);
+        return _tranchesInUnderlyingToken(_tranche, trancheAmount);
     }
 
-    /// @dev get tranche balances in this contract holds denominated in `idleCDO.strategyToken`
-    function _getTrancheBalanceInUnderlying(IERC20 _tranche)
+    /// @dev convert `tranches` to `underlyingToken`
+    function _tranchesInUnderlyingToken(IERC20 _tranche, uint256 trancheAmount)
         internal
         view
-        returns (uint256 balancesInUnderlyingToken)
+        returns (uint256)
     {
+        if (trancheAmount == 0) return 0;
         uint256 price = idleCDO.virtualPrice(address(_tranche));
-        balancesInUnderlyingToken = _tranche
-            .balanceOf(address(this))
-            .mul(price)
-            .div(_EXP_SCALE);
+        return trancheAmount.mul(price).div(_EXP_SCALE);
     }
 
     /// @dev convert `wantAmount` denominated in `tranche`

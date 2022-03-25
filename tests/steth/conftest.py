@@ -115,7 +115,7 @@ def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy
 def multi_rewards(MultiRewards, idleCDO, strategy_config, gov):
     is_AA = strategy_config['tranche_type'] == 'AA'
     multi_rewards = gov.deploy(
-        MultiRewards, idleCDO.AATranche() if is_AA else idleCDO.BBTranche()
+        MultiRewards, gov, idleCDO.AATranche() if is_AA else idleCDO.BBTranche()
     )
     yield multi_rewards
 

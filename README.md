@@ -18,7 +18,7 @@ The following methods should be overrode in parent contact.
 
 #### Core Deposit/Withdraw Logic
 
-The following methods should be overrode in parent contact:
+The following methods can be overrode in parent contact:
 
 - `_invest()`
 - `_dinvest()`
@@ -29,18 +29,20 @@ The following methods should be overrode in parent contact:
 #### Claiming Rewards
 
 To sell claimed rewards, this contract makes use of [ySwaps](https://github.com/yearn/yswaps/blob/main/).
-ySwap's idea is to give a yearn maintained swapper permissions to pull reward tokens from the strategy. The selling of tokens will be outsourced to ySwaps and the want will be airdropped back to the strategy asynchronously.
+ySwap's idea is to give a yearn maintained swapper permissions to pull reward tokens from the strategy. The selling of tokens will be outsourced to ySwaps and the `want` will be airdropped back to the strategy asynchronously.
 
-The following methods should be overrode in parent contact:
+The following can be overrode in parent contact:
 
 - `_claimRewards()`
 
 #### View Functions
 
-The following methods should be overrode in parent contact:
+The following methods can be overrode when vault `want` is not equal to `tranche` underlying.
 
 - `_wantsInTranche()`
-- `_getTrancheBalanceInWant()`
+- `_tranchesInWant()`
+
+For example `StEthTrancheStrategy`(`want`: WETH, `tranche` underlying: stETH) overrides this methods.
 
 ### StEthTrancheStrategy
 

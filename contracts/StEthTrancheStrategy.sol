@@ -129,20 +129,19 @@ contract StEthTrancheStrategy is TrancheStrategy {
         return _amount;
     }
 
-    /// @dev override default behavior
-    /// @notice
-    function _getTrancheBalanceInWant(IERC20 _tranche)
+    /// @dev convert `tranches` denominated in `want`
+    /// @notice Usually idleCDO.underlyingToken is equal to the `want`
+    function _tranchesInWant(IERC20 _tranche, uint256 trancheAmount)
         internal
         view
         override
         returns (uint256)
     {
-        // underlying token of steth cdo is steth
-        uint256 balancesInStEth = _getTrancheBalanceInUnderlying(_tranche);
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
         require(isSafe, "strat/price-feed-unsafe");
 
-        return balancesInStEth.mul(stEthPrice).div(_EXP_SCALE);
+        uint256 amountsInStEth = super._tranchesInWant(_tranche, trancheAmount);
+        return amountsInStEth.mul(stEthPrice).div(_EXP_SCALE);
     }
 
     /// @dev convert `wantAmount` denominated in `tranche`
