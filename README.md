@@ -75,6 +75,8 @@ brownie networks --help
 
 ## Testing
 
+Tests for base strategy can be found in `tests/base`.
+
 To run the tests:
 
 ```

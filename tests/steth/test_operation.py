@@ -123,7 +123,7 @@ def test_profitable_harvest(
 
     profit = token.balanceOf(vault.address)  # Profits go to vault
     # TODO: Uncomment the lines below
-    assert strategy.trancheBalanceInWant() + profit > amount
+    assert strategy.estimatedTotalAssets() + profit > amount
     assert vault.pricePerShare() >= before_pps
 
 
@@ -144,7 +144,7 @@ def test_change_debt(
 
     vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
-    tx = strategy.harvest()
+    strategy.harvest()
     (price, _) = steth_price_feed.current_price()
 
     # assert pytest.approx(strategy.estimatedTotalAssets(),
@@ -156,7 +156,7 @@ def test_change_debt(
     # TODO: uncomment the following lines.
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     chain.sleep(1)
-    tx = strategy.harvest()
+    strategy.harvest()
 
     (price, _) = steth_price_feed.current_price()
     assert 0.995 * half <= strategy.estimatedTotalAssets() <= price * half / 1e18

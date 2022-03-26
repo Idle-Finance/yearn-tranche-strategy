@@ -63,3 +63,8 @@ def trade_factory():
 @pytest.fixture
 def ymechs_safe():
     yield Contract("0x2C01B4AD51a67E2d8F02208F54dF9aC4c0B778B6")
+
+
+@pytest.fixture
+def staking_reward(ERC20Mock, accounts):
+    yield ERC20Mock.deploy({"from": accounts[0]})

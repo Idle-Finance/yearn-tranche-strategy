@@ -2,10 +2,7 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-import {
-    BaseStrategy,
-    StrategyParams
-} from "@yearnvaults/contracts/BaseStrategy.sol";
+import { BaseStrategy } from "@yearnvaults/contracts/BaseStrategy.sol";
 import {
     SafeERC20,
     SafeMath,
@@ -44,7 +41,7 @@ contract TrancheStrategy is BaseStrategy {
 
     address public tradeFactory;
 
-    IERC20[] public rewardTokens;
+    IERC20[] internal rewardTokens;
 
     constructor(
         address _vault,
@@ -74,6 +71,10 @@ contract TrancheStrategy is BaseStrategy {
         _EXP_SCALE = 10**uint256(_tranche.decimals());
 
         want.safeApprove(address(_idleCDO), type(uint256).max);
+
+        if (address(_multiRewards) != address(0)) {
+            _tranche.approve(address(_multiRewards), type(uint256).max);
+        }
     }
 
     // ******** PERMISSIONED METHODS ************
@@ -88,13 +89,36 @@ contract TrancheStrategy is BaseStrategy {
         enabledStake = false;
         IMultiRewards _multiRewards = multiRewards;
         // withdrawing amount 0 will cause to revert
-        if (_multiRewards.balanceOf(address(this)) != 0) {
+        if (
+            address(_multiRewards) != address(0) &&
+            _multiRewards.balanceOf(address(this)) != 0
+        ) {
             _multiRewards.exit();
         }
     }
 
+    function setMultiRewards(IMultiRewards _multiRewards)
+        external
+        onlyVaultManagers
+    {
+        IMultiRewards _oldMultiRewards = multiRewards;
+        multiRewards = _multiRewards;
+
+        // withdrawing amount 0 will cause to revert
+        if (
+            address(_oldMultiRewards) != address(0) &&
+            _oldMultiRewards.balanceOf(address(this)) != 0
+        ) {
+            _oldMultiRewards.exit();
+            tranche.approve(address(_oldMultiRewards), 0);
+        }
+
+        if (address(_multiRewards) != address(0)) {
+            tranche.approve(address(_multiRewards), type(uint256).max);
+        }
+    }
+
     /// @notice set reward tokens
-    /// @dev caller must have STRATEGY role if `tradeFactory` is non-zero address : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
     function setRewardTokens(IERC20[] memory _rewardTokens)
         external
         onlyVaultManagers
@@ -112,7 +136,7 @@ contract TrancheStrategy is BaseStrategy {
         }
     }
 
-    /// @dev caller must have STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    /// @dev this strategy must be granted STRATEGY role if `_newTradeFactory` is non-zero address : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
     function updateTradeFactory(address _newTradeFactory)
         public
         onlyGovernance
@@ -130,7 +154,6 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @notice setup tradeFactory
     /// @dev assume tradeFactory is not zero address
-    ///      caller must have STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
     function _approveTradeFactory() internal {
         IERC20[] memory _rewardTokens = rewardTokens;
         address _want = address(want);
@@ -141,13 +164,13 @@ contract TrancheStrategy is BaseStrategy {
         for (uint256 i; i < length; i++) {
             _rewardToken = _rewardTokens[i];
             _rewardToken.safeApprove(address(tradeFactory), type(uint256).max);
+            // this strategy must be granted STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
             tf.enable(address(_rewardToken), _want);
         }
     }
 
     /// @notice remove tradeFactory
     /// @dev assume tradeFactory is not zero address
-    ///      caller must have STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
     function _revokeTradeFactoryPermissions() internal {
         address _tradeFactory = tradeFactory;
         IERC20[] memory _rewardTokens = rewardTokens;
@@ -162,6 +185,10 @@ contract TrancheStrategy is BaseStrategy {
 
     function name() external view override returns (string memory) {
         return string(abi.encodePacked("Strategy", tranche.name()));
+    }
+
+    function getRewardTokens() external view returns (IERC20[] memory) {
+        return rewardTokens;
     }
 
     /**
@@ -197,9 +224,11 @@ contract TrancheStrategy is BaseStrategy {
     {
         // TODO: Build a more accurate estimate using the value of all positions in terms of `want`
         IERC20 _tranche = tranche;
+
+        uint256 wantBal = _balance(want);
         uint256 totalTranches =
             multiRewards.balanceOf(address(this)).add(_balance(_tranche));
-        return _tranchesInWant(_tranche, totalTranches);
+        return wantBal.add(_tranchesInWant(_tranche, totalTranches));
     }
 
     /**
@@ -349,8 +378,9 @@ contract TrancheStrategy is BaseStrategy {
         returns (uint256 amountFreed)
     {
         // TODO: Liquidate all positions and return the amount freed.
-        uint256 trancheBalance = _balance(tranche);
-        _divest(trancheBalance);
+        uint256 totalTranches =
+            multiRewards.balanceOf(address(this)).add(_balance(tranche));
+        _divest(totalTranches);
         amountFreed = _balance(want);
     }
 
@@ -476,12 +506,17 @@ contract TrancheStrategy is BaseStrategy {
         if (enabledStake) {
             IMultiRewards _multiRewards = multiRewards;
 
-            uint256 stakedBal = _multiRewards.balanceOf(address(this));
             uint256 trancheBal = _balance(tranche);
+            uint256 stakedBal = _multiRewards.balanceOf(address(this));
 
-            // if current balance > staked balance, withdraw
-            if (_trancheAmount > trancheBal)
-                _multiRewards.withdraw(_trancheAmount - trancheBal); // no underflow
+            // if tranche to withdraw > current balance, withdraw
+            if (_trancheAmount > trancheBal) {
+                uint256 toWithdraw =
+                    stakedBal >= _trancheAmount - trancheBal // should be stakedBal == _trancheAmount - trancheBal
+                        ? _trancheAmount - trancheBal // no underflow
+                        : stakedBal;
+                _multiRewards.withdraw(toWithdraw);
+            }
         }
 
         uint256 before = _balance(_want);
@@ -503,7 +538,7 @@ contract TrancheStrategy is BaseStrategy {
         function(uint256) external returns (uint256) _depositXX =
             isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
 
-        _depositXX(_underlyingAmount);
+        if (_underlyingAmount != 0) _depositXX(_underlyingAmount);
     }
 
     /// @notice redeem tranches and get `want`
@@ -513,7 +548,7 @@ contract TrancheStrategy is BaseStrategy {
         function(uint256) external returns (uint256) _withdrawXX =
             isAATranche ? idleCDO.withdrawAA : idleCDO.withdrawBB;
 
-        _withdrawXX(_trancheAmount);
+        if (_trancheAmount != 0) _withdrawXX(_trancheAmount);
     }
 
     /* **** Internal Helper functions **** */

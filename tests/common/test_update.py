@@ -5,9 +5,6 @@ import brownie
 def test_enable_disable_staking(
     chain, token, vault, strategy, user, management, gov, trade_factory
 ):
-    strategy.updateTradeFactory(trade_factory, {"from": gov})
-    assert strategy.tradeFactory() == trade_factory
-
     strategy.enableStaking({"from": management})
     assert strategy.enabledStake() is True
 
@@ -25,14 +22,11 @@ def test_update_reward_tokens(
     ldo = "0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32"
     rewards = [ldo]  # Example rewards
 
-    strategy.updateTradeFactory(trade_factory, {"from": gov})
-    assert strategy.tradeFactory() == trade_factory
-
     with brownie.reverts():
         strategy.setRewardTokens(rewards, {"from": user})
 
     strategy.setRewardTokens(rewards, {"from": management})
-    assert strategy.rewardTokens(0) == rewards[0]
+    assert strategy.getRewardTokens() == rewards
 
 
 def test_update_trade_factory(
@@ -43,15 +37,11 @@ def test_update_trade_factory(
     rewards = [ldo]  # Example rewards
 
     strategy.setRewardTokens(rewards, {"from": management})
-    assert strategy.rewardTokens(0) == rewards[0]
+    assert strategy.getRewardTokens() == rewards
 
     # check
-    strategy.updateTradeFactory(trade_factory, {"from": gov})
-    assert strategy.rewardTokens(0) == rewards[0]
-    assert strategy.tradeFactory() == trade_factory
-
     strategy.updateTradeFactory(ZERO_ADDRESS, {"from": gov})
-    assert strategy.rewardTokens(0) == rewards[0]
+    assert strategy.getRewardTokens() == rewards
     assert strategy.tradeFactory() == ZERO_ADDRESS
 
     with brownie.reverts():

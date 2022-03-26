@@ -95,7 +95,7 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, StEthTrancheStrategy, multi_rewards, ymechs_safe):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, staking_reward, StEthTrancheStrategy, multi_rewards, ymechs_safe):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = StEthTrancheStrategy
@@ -108,15 +108,25 @@ def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy
     trade_factory.grantRole(
         trade_factory.STRATEGY(), strategy, {"from": ymechs_safe}
     )
+    strategy.updateTradeFactory(trade_factory, {"from": gov})
+    rewards = [staking_reward]  # Example rewards
+    strategy.setRewardTokens(rewards, {"from": gov})
+    strategy.enableStaking({"from": gov})
     yield strategy
 
 
 @pytest.fixture
-def multi_rewards(MultiRewards, idleCDO, strategy_config, gov):
+def multi_rewards(MultiRewards, idleCDO, strategy_config, gov, staking_reward):
     is_AA = strategy_config['tranche_type'] == 'AA'
     multi_rewards = gov.deploy(
         MultiRewards, gov, idleCDO.AATranche() if is_AA else idleCDO.BBTranche()
     )
+    staking_reward.mint(gov, 1e25)
+    staking_reward.approve(multi_rewards, 1e25, {"from": gov})
+
+    multi_rewards.addReward(staking_reward, gov,
+                            3600 * 24 * 180, {"from": gov})
+    multi_rewards.notifyRewardAmount(staking_reward, 1e25, {"from": gov})
     yield multi_rewards
 
 

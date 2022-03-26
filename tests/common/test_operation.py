@@ -40,7 +40,7 @@ def test_emergency_exit(
     strategy.setEmergencyExit()
     chain.sleep(1)
     strategy.harvest()
-    assert strategy.estimatedTotalAssets() < amount
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
 
 def test_profitable_harvest(
@@ -66,7 +66,7 @@ def test_profitable_harvest(
     chain.mine(1)
     profit = token.balanceOf(vault.address)  # Profits go to vault
     # TODO: Uncomment the lines below
-    assert strategy.trancheBalanceInWant() + profit > amount
+    assert strategy.estimatedTotalAssets() + profit > amount
     assert vault.pricePerShare() >= before_pps
 
 
