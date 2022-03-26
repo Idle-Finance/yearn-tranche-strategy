@@ -88,7 +88,7 @@ contract TrancheStrategy is BaseStrategy {
     function disableStaking() external onlyVaultManagers {
         enabledStake = false;
         IMultiRewards _multiRewards = multiRewards;
-        // withdrawing amount 0 will cause to revert
+        // exit NOTE: withdrawing amount 0 will cause to revert
         if (
             address(_multiRewards) != address(0) &&
             _multiRewards.balanceOf(address(this)) != 0
@@ -104,15 +104,16 @@ contract TrancheStrategy is BaseStrategy {
         IMultiRewards _oldMultiRewards = multiRewards;
         multiRewards = _multiRewards;
 
-        // withdrawing amount 0 will cause to revert
-        if (
-            address(_oldMultiRewards) != address(0) &&
-            _oldMultiRewards.balanceOf(address(this)) != 0
-        ) {
-            _oldMultiRewards.exit();
+        if (address(_oldMultiRewards) != address(0)) {
+            // exit NOTE: withdrawing amount 0 will cause to revert
+            if (_oldMultiRewards.balanceOf(address(this)) != 0) {
+                _oldMultiRewards.exit();
+            }
+            // revoke
             tranche.approve(address(_oldMultiRewards), 0);
         }
 
+        // approve
         if (address(_multiRewards) != address(0)) {
             tranche.approve(address(_multiRewards), type(uint256).max);
         }

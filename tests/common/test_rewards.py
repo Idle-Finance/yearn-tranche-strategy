@@ -14,17 +14,20 @@ def test_operation(
     strategy.harvest()
 
     price = idleCDO.virtualPrice(strategy.tranche())
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
+    assert pytest.approx(strategy.estimatedTotalAssets(),
+                         rel=RELATIVE_APPROX) == amount
 
     days = 14
     chain.sleep(days * 24 * 60 * 60)
     chain.mine(1)
 
     assert staking_reward.balanceOf(strategy) == 0
-    assert pytest.approx(multi_rewards.balanceOf(strategy), rel=RELATIVE_APPROX) == amount * 1e18 / price
+    assert pytest.approx(multi_rewards.balanceOf(
+        strategy), rel=RELATIVE_APPROX) == amount * 1e18 / price
 
     # claim rewards
     strategy.harvest()
 
     assert staking_reward.balanceOf(strategy) > 0
-    assert pytest.approx(multi_rewards.balanceOf(strategy), rel=RELATIVE_APPROX) == amount * 1e18 / price
+    assert pytest.approx(multi_rewards.balanceOf(
+        strategy), rel=RELATIVE_APPROX) == amount * 1e18 / price

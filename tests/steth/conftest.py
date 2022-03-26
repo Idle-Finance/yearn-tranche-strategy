@@ -1,4 +1,3 @@
-from posixpath import isabs
 import pytest
 from brownie import config, Contract
 

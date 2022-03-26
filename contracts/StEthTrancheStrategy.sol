@@ -30,11 +30,12 @@ contract StEthTrancheStrategy is TrancheStrategy {
         IStETH(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
 
     uint256 private constant DENOMINATOR = 10_000;
-    address private constant REFERRAL = address(0);
+    address private constant REFERRAL =
+        0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814; // Idle finance Treasury League multisig
     int128 private constant WETHID = 0;
     int128 private constant STETHID = 1;
 
-    uint256 public maximumSlippage = 50; //out of 10000. 50 = 0.5%
+    uint256 public maximumSlippage = 50; // out of 10000. 50 = 0.5%
 
     event UpdateMaxSlippage(uint256 _oldSlippage, uint256 _newSlippage);
 

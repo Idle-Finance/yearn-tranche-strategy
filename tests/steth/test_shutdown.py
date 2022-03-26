@@ -2,7 +2,6 @@
 #       Make sure to demonstrate the "worst case losses" as well as the time it takes
 
 from brownie import ZERO_ADDRESS
-import brownie
 import pytest
 
 
