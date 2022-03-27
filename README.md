@@ -10,8 +10,8 @@ The main contract which will be used by users is `IdleCDO` which allow to deposi
 
 See the [Idle Perpetual Tranche README](https://github.com/Idle-Labs/idle-tranches) for more detailed information.
 
-## Strategy
-### TrancheStrategy
+## Strategies
+### TrancheStrategy.sol
 TrancheStrategy is a base strategy contract.
 This strategy is used when vault `want` is equal to `tranche` underlying.
 The following methods should be overrode in parent contact.
@@ -44,7 +44,7 @@ The following methods can be overrode when vault `want` is not equal to `tranche
 
 For example `StEthTrancheStrategy`(`want`: WETH, `tranche` underlying: stETH) overrides this methods.
 
-### StEthTrancheStrategy
+### StEthTrancheStrategy.sol
 
 Stakes WETH on Lido.fi to mint stETH which accumulates ETH 2.0 staking rewards. This strategy will buy stETH off the market if it is cheaper than staking. And then deposit the stETH to Idle StETH Perpetual Tranche.
 
