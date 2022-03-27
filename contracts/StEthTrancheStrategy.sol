@@ -2,10 +2,6 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-import "../interfaces/lido/IStETH.sol";
-import "../interfaces/lido/IStEthPriceFeed.sol";
-import "../interfaces/curve/IStEthStableSwap.sol";
-
 import {
     SafeERC20,
     SafeMath,
@@ -13,6 +9,10 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./Strategy.sol";
+
+import "../interfaces/lido/IStETH.sol";
+import "../interfaces/lido/IStEthPriceFeed.sol";
+import "../interfaces/curve/IStEthStableSwap.sol";
 
 /// @title StETH Tranche Strategy
 /// @author bakuchi

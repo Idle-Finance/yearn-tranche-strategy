@@ -88,7 +88,8 @@ contract TrancheStrategy is BaseStrategy {
     function disableStaking() external onlyVaultManagers {
         enabledStake = false;
         IMultiRewards _multiRewards = multiRewards;
-        // exit NOTE: withdrawing amount 0 will cause to revert
+        // exit
+        // NOTE: withdrawing amount 0 will cause to revert
         if (
             address(_multiRewards) != address(0) &&
             _multiRewards.balanceOf(address(this)) != 0
@@ -224,15 +225,12 @@ contract TrancheStrategy is BaseStrategy {
         returns (uint256)
     {
         // TODO: Build a more accurate estimate using the value of all positions in terms of `want`
-        IERC20 _tranche = tranche;
-
         uint256 wantBal = _balance(want);
-        uint256 totalTranches =
-            multiRewards.balanceOf(address(this)).add(_balance(_tranche));
-        return wantBal.add(_tranchesInWant(_tranche, totalTranches));
+        uint256 totalTranches = totalTranches();
+        return wantBal.add(_tranchesInWant(tranche, totalTranches));
     }
 
-    /// @dev for debugging
+    /// @notice return staked tranches + tranche balance that this contract holds
     function totalTranches() public view returns (uint256) {
         return multiRewards.balanceOf(address(this)).add(_balance(tranche));
     }
@@ -287,7 +285,7 @@ contract TrancheStrategy is BaseStrategy {
         // should be true if working greatly
         if (debt < totalAssets) {
             // profit
-            _profit = totalAssets.sub(debt);
+            _profit = totalAssets - debt;
         } else {
             _loss = debt.sub(totalAssets);
         }
@@ -296,17 +294,17 @@ contract TrancheStrategy is BaseStrategy {
 
         if (toWithdraw > wantBal) {
             // (wantBal + wantInvested) - totalDebt + debtOutstanding - wantBal
-            toWithdraw = toWithdraw.sub(wantBal);
+            toWithdraw = toWithdraw - wantBal; // no underflow
             uint256 withdrawn = _divest(_wantsInTranche(_tranche, toWithdraw));
 
             uint256 withdrawalLoss;
             if (withdrawn < toWithdraw) {
-                withdrawalLoss = toWithdraw.sub(withdrawn);
+                withdrawalLoss = toWithdraw - withdrawn; // no underflow
             }
 
             // when we withdraw we can lose money in the withdrawal
             if (withdrawalLoss < _profit) {
-                _profit = _profit.sub(withdrawalLoss);
+                _profit = _profit - withdrawalLoss; // no underflow
             } else {
                 // Add withdrawal loss to loss, cancel profit
                 _loss = _loss.add(withdrawalLoss.sub(_profit));
@@ -340,7 +338,7 @@ contract TrancheStrategy is BaseStrategy {
         uint256 wantBal = _balance(want);
 
         if (wantBal > _debtOutstanding) {
-            uint256 amountToDeposit = wantBal.sub(_debtOutstanding);
+            uint256 amountToDeposit = wantBal - _debtOutstanding; // no underflow
             _invest(amountToDeposit);
         }
     }
@@ -368,10 +366,10 @@ contract TrancheStrategy is BaseStrategy {
         uint256 wantBal = _balance(want);
 
         if (_amountNeeded > wantBal) {
-            uint256 toWithdraw = _amountNeeded.sub(wantBal);
+            uint256 toWithdraw = _amountNeeded - wantBal; // no underflow
             uint256 withdrawn = _divest(_wantsInTranche(_tranche, toWithdraw));
             if (withdrawn < toWithdraw) {
-                _loss = toWithdraw.sub(withdrawn);
+                _loss = toWithdraw - withdrawn; // no underflow
             }
         }
 
@@ -384,8 +382,7 @@ contract TrancheStrategy is BaseStrategy {
         returns (uint256 amountFreed)
     {
         // TODO: Liquidate all positions and return the amount freed.
-        uint256 totalTranches =
-            multiRewards.balanceOf(address(this)).add(_balance(tranche));
+        uint256 totalTranches = totalTranches();
         _divest(totalTranches);
         amountFreed = _balance(want);
     }
