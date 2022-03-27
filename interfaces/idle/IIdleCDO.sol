@@ -82,11 +82,13 @@ interface IIdleCDO {
     function depositBB(uint256 _amount) external returns (uint256);
 
     /// @notice pausable in _deposit
+    /// @dev withdrawing _amount 0 will revert
     /// @param _amount amount of AA tranche tokens to burn
     /// @return underlying tokens redeemed
     function withdrawAA(uint256 _amount) external returns (uint256);
 
     /// @notice pausable
+    /// @dev withdrawing _amount 0 will revert
     /// @param _amount amount of BB tranche tokens to burn
     /// @return underlying tokens redeemed
     function withdrawBB(uint256 _amount) external returns (uint256);
