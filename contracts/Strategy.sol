@@ -81,6 +81,7 @@ contract TrancheStrategy is BaseStrategy {
     /// @notice enable staking
     function enableStaking() external onlyVaultManagers {
         require(tradeFactory != address(0), "strat/tf-zero"); // first set tradeFactory
+        require(address(multiRewards) != address(0), "strat/multirewards-zero"); // first set multiRewards
         enabledStake = true;
     }
 
