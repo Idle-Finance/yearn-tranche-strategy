@@ -40,7 +40,9 @@ def test_emergency_exit(
     strategy.setEmergencyExit()
     chain.sleep(1)
     strategy.harvest()
-    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
+
+    assert strategy.estimatedTotalAssets() < amount
+    assert pytest.approx(token.balanceOf(vault), rel=RELATIVE_APPROX) == amount
 
 
 def test_profitable_harvest(
@@ -58,7 +60,7 @@ def test_profitable_harvest(
 
     # TODO: Add some code before harvest #2 to simulate earning yield
     before_pps = vault.pricePerShare()
-    
+
     # Harvest 2: Realize profit
     chain.sleep(1)
     strategy.harvest()
