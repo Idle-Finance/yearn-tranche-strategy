@@ -60,7 +60,7 @@ contract TrancheStrategy is BaseStrategy {
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
         router = _router;
-        rewardTokens = _rewardTokens;
+        rewardTokens = _rewardTokens; // Set `tradeFactory` address after deployment.
         multiRewards = _multiRewards;
 
         IERC20Metadata _tranche =
@@ -138,7 +138,7 @@ contract TrancheStrategy is BaseStrategy {
         }
     }
 
-    /// @dev this strategy must be granted STRATEGY role if `_newTradeFactory` is non-zero address : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    /// @dev this strategy must be granted STRATEGY role if `_newTradeFactory` is non-zero address NOTE: https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
     function updateTradeFactory(address _newTradeFactory)
         public
         onlyGovernance
@@ -518,7 +518,9 @@ contract TrancheStrategy is BaseStrategy {
                     stakedBal >= _trancheAmount - trancheBal // should be stakedBal == _trancheAmount - trancheBal
                         ? _trancheAmount - trancheBal // no underflow
                         : stakedBal;
-                _multiRewards.withdraw(toWithdraw);
+                if (toWithdraw != 0) {
+                    _multiRewards.withdraw(toWithdraw);
+                }
             }
         }
 

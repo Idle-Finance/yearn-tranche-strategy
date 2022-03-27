@@ -106,7 +106,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         uint256 _stEthBalanceBefore = _balance(stETH);
         uint256 _trancheBalance = _balance(tranche);
 
-        // fix amount
+        // fix rounding error
         if (_trancheBalance < _trancheAmount) {
             _trancheAmount = _trancheBalance;
         }
@@ -139,7 +139,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         returns (uint256)
     {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
-        require(isSafe, "strat/price-feed-unsafe");
+        require(isSafe, "strat/price-unsafe");
 
         uint256 amountsInStEth = super._tranchesInWant(_tranche, trancheAmount);
         return amountsInStEth.mul(stEthPrice).div(_EXP_SCALE);
@@ -159,7 +159,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         returns (uint256)
     {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
-        require(isSafe, "strat/price-feed-unsafe");
+        require(isSafe, "strat/price-unsafe");
 
         // wantAmount to stEthAmount (underlyingAmount)
         uint256 stEthAmount = wantAmount.mul(_EXP_SCALE).div(stEthPrice);
