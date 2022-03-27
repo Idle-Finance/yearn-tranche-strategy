@@ -145,6 +145,11 @@ contract StEthTrancheStrategy is TrancheStrategy {
         return amountsInStEth.mul(stEthPrice).div(_EXP_SCALE);
     }
 
+    /// @dev for debugging
+    function wantBal() external view returns (uint256) {
+        return _balance(want);
+    }
+
     /// @dev convert `wantAmount` denominated in `tranche`
     /// NOTE: underlying token is equal to steth here
     function _wantsInTranche(IERC20 _tranche, uint256 wantAmount)

@@ -3,6 +3,7 @@
 #       Show that nothing is lost!
 
 import pytest
+from util import get_estimate_total_assets
 
 
 def test_migration(
@@ -25,19 +26,25 @@ def test_migration(
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
+
     chain.sleep(1)
     strategy.harvest()
 
-    (price, _) = steth_price_feed.current_price()
-    assert pytest.approx(strategy.estimatedTotalAssets(),
-                         rel=RELATIVE_APPROX) == price * amount / 1e18
+    assert pytest.approx(
+        strategy.estimatedTotalAssets(),
+        rel=RELATIVE_APPROX
+    ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
 
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
         StEthTrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards)
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
+
     assert (
-        pytest.approx(new_strategy.estimatedTotalAssets(),
-                      rel=RELATIVE_APPROX) == price * amount / 1e18
+        pytest.approx(
+            new_strategy.estimatedTotalAssets(),
+            rel=RELATIVE_APPROX
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
     )

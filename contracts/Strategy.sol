@@ -232,6 +232,11 @@ contract TrancheStrategy is BaseStrategy {
         return wantBal.add(_tranchesInWant(_tranche, totalTranches));
     }
 
+    /// @dev for debugging
+    function totalTranches() public view returns (uint256) {
+        return multiRewards.balanceOf(address(this)).add(_balance(tranche));
+    }
+
     /**
      * Perform any Strategy unwinding or other calls necessary to capture the
      * "free return" this Strategy has generated since the last time its core

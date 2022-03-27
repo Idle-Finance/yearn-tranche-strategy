@@ -1,9 +1,10 @@
 import brownie
 import pytest
+from util import get_estimate_total_assets
 
 
 def test_operation_reverts(
-    chain, accounts, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, steth_price_feed, underlying_token
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, underlying_token
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -12,11 +13,14 @@ def test_operation_reverts(
 
     # harvest
     chain.sleep(1)
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
-    (price, _) = steth_price_feed.current_price()
+
     assert (
-        pytest.approx(strategy.estimatedTotalAssets(),
-                      rel=RELATIVE_APPROX) == price * amount / 1e18
+        pytest.approx(
+            strategy.estimatedTotalAssets(),
+            rel=RELATIVE_APPROX
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
     )
 
     # tend()
@@ -30,7 +34,7 @@ def test_operation_reverts(
 
 
 def test_operation(
-    chain, accounts, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, steth_price_feed, underlying_token,
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, underlying_token,
 ):
     # Deposit to the vault
     user_balance_before = token.balanceOf(user)
@@ -40,11 +44,14 @@ def test_operation(
 
     # harvest
     chain.sleep(1)
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
-    (price, _) = steth_price_feed.current_price()
+
     assert (
-        pytest.approx(strategy.estimatedTotalAssets(),
-                      rel=RELATIVE_APPROX) == price * amount / 1e18
+        pytest.approx(
+            strategy.estimatedTotalAssets(),
+            rel=RELATIVE_APPROX
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
     )
 
     # tend()
@@ -63,18 +70,21 @@ def test_operation(
 
 
 def test_emergency_exit(
-    chain, accounts, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, steth_price_feed
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
+
     chain.sleep(1)
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
 
-    (price, _) = steth_price_feed.current_price()
     assert (
-        pytest.approx(strategy.estimatedTotalAssets(),
-                      rel=RELATIVE_APPROX) == price * amount / 1e18
+        pytest.approx(
+            strategy.estimatedTotalAssets(),
+            rel=RELATIVE_APPROX
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
     )
 
     # set emergency and exit
@@ -82,13 +92,12 @@ def test_emergency_exit(
     chain.sleep(1)
     strategy.harvest()
 
-    (price, _) = steth_price_feed.current_price()
     assert strategy.estimatedTotalAssets() <= 2
     assert token.balanceOf(vault) >= amount * 0.995  # 0.5% max slippage
 
 
 def test_profitable_harvest(
-    chain, accounts, token, vault, strategy, user, amount, RELATIVE_APPROX, steth_price_feed, whale
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, whale
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -97,12 +106,14 @@ def test_profitable_harvest(
 
     # Harvest 1: Send funds through the strategy
     chain.sleep(1)
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
 
-    (price, _) = steth_price_feed.current_price()
     assert (
-        pytest.approx(strategy.estimatedTotalAssets(),
-                      rel=RELATIVE_APPROX) == price * amount / 1e18
+        pytest.approx(
+            strategy.estimatedTotalAssets(),
+            rel=RELATIVE_APPROX
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
     )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
@@ -128,40 +139,56 @@ def test_profitable_harvest(
 
 
 def test_change_debt(
-    chain, gov, token, vault, strategy, user, strategist, amount, RELATIVE_APPROX, steth_price_feed
+    chain, gov, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed
 ):
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
+
     chain.sleep(1)
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
     half = int(amount / 2)
 
-    (price, _) = steth_price_feed.current_price()
-    assert pytest.approx(strategy.estimatedTotalAssets(),
-                         rel=RELATIVE_APPROX) == price * half / 1e18
+    estimatedTotalAssetsBefore = get_estimate_total_assets(
+        strategy, steth_price_feed, idleCDO, tranche_price_when_minted, half
+    )
+    assert (
+        pytest.approx(
+            strategy.estimatedTotalAssets(),
+            rel=RELATIVE_APPROX
+        ) == estimatedTotalAssetsBefore
+    )
 
     vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
-    strategy.harvest()
-    (price, _) = steth_price_feed.current_price()
 
-    # assert pytest.approx(strategy.estimatedTotalAssets(),
-    #                      rel=RELATIVE_APPROX) == price * half / 1e18 + estimatedTotalAssetsBefore
-    assert 0.995 * amount <= strategy.estimatedTotalAssets() <= price * \
-        amount / 1e18
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
+    strategy.harvest()
+
+    assert 0.995 * amount <= strategy.estimatedTotalAssets() <= get_estimate_total_assets(
+        strategy,
+        steth_price_feed,
+        idleCDO,
+        tranche_price_when_minted,
+        half
+    ) + estimatedTotalAssetsBefore
 
     # In order to pass this tests, you will need to implement prepareReturn.
     # TODO: uncomment the following lines.
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     chain.sleep(1)
+    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
 
-    (price, _) = steth_price_feed.current_price()
-    assert 0.995 * half <= strategy.estimatedTotalAssets() <= price * half / 1e18
-    # assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX*10) == (
-    #     estimatedTotalAssetsBefore - tokens_sold * price / 1e18)
+    assert 0.995 * half <= strategy.estimatedTotalAssets() <= get_estimate_total_assets(
+        strategy,
+        steth_price_feed,
+        idleCDO,
+        tranche_price_when_minted,
+        half
+    )
 
 
 def test_sweep(gov, vault, strategy, token, user, amount, dai):
