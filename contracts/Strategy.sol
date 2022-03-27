@@ -52,15 +52,13 @@ contract TrancheStrategy is BaseStrategy {
         IMultiRewards _multiRewards
     ) public BaseStrategy(_vault) {
         require(address(_router) != address(0), "strat/zero-address");
-        // TODO:
-        // maxReportDelay = 6300;
-        // profitFactor = 100;
-        // debtThreshold = 0;
 
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
         router = _router;
+        // can be empaty array
         rewardTokens = _rewardTokens; // Set `tradeFactory` address after deployment.
+        // can be zero address
         multiRewards = _multiRewards;
 
         IERC20Metadata _tranche =
@@ -233,7 +231,14 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @notice return staked tranches + tranche balance that this contract holds
     function totalTranches() public view returns (uint256) {
-        return multiRewards.balanceOf(address(this)).add(_balance(tranche));
+        IMultiRewards _multiRewards = multiRewards;
+        uint256 stakedBal;
+
+        if (address(_multiRewards) != address(0)) {
+            stakedBal = _multiRewards.balanceOf(address(this));
+        }
+
+        return stakedBal.add(_balance(tranche));
     }
 
     /**
@@ -277,7 +282,9 @@ contract TrancheStrategy is BaseStrategy {
         IERC20 _tranche = tranche;
         _debtPayment = _debtOutstanding;
 
-        _claimRewards();
+        if (enabledStake) {
+            _claimRewards();
+        }
 
         uint256 wantBal = _balance(_want);
         uint256 totalAssets = estimatedTotalAssets();
