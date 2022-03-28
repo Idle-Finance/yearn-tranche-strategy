@@ -319,7 +319,7 @@ contract TrancheStrategy is BaseStrategy {
                 _profit = 0;
             }
 
-            wantBal = want.balanceOf(address(this));
+            wantBal = _balance(_want);
 
             // profit + _debtOutstanding must be <= wantbalance. Prioritise profit first
             if (wantBal < _profit) {
