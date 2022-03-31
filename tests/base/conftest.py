@@ -67,13 +67,13 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, trade_factory, multi_rewards, staking_reward, ymechs_safe):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, trade_factory, multi_rewards, staking_reward, ymechs_safe, healthCheck):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = TrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards
+        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, healthCheck
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})

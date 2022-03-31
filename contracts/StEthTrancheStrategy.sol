@@ -53,7 +53,8 @@ contract StEthTrancheStrategy is TrancheStrategy {
         bool _isAATranche,
         IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
-        IMultiRewards _multiRewards
+        IMultiRewards _multiRewards,
+        address _healthCheck
     )
         public
         TrancheStrategy(
@@ -62,7 +63,8 @@ contract StEthTrancheStrategy is TrancheStrategy {
             _isAATranche,
             _router,
             _rewardTokens,
-            _multiRewards
+            _multiRewards,
+            _healthCheck
         )
     {
         require(address(want) == address(WETH), "strat/want-ne-weth");

@@ -49,7 +49,8 @@ contract TrancheStrategy is BaseStrategy {
         bool _isAATranche,
         IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
-        IMultiRewards _multiRewards
+        IMultiRewards _multiRewards,
+        address _healthCheck
     ) public BaseStrategy(_vault) {
         require(address(_router) != address(0), "strat/zero-address");
 
@@ -60,6 +61,7 @@ contract TrancheStrategy is BaseStrategy {
         rewardTokens = _rewardTokens; // set `tradeFactory` address after deployment.
         // can be zero address
         multiRewards = _multiRewards; // set `enabledStake` to true to enable stakeing after deployment.
+        healthCheck = _healthCheck;
 
         IERC20Metadata _tranche =
             IERC20Metadata(

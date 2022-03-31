@@ -38,6 +38,11 @@ def keeper(accounts):
 
 
 @pytest.fixture
+def healthCheck():
+    yield Contract("0xDDCea799fF1699e98EDF118e0629A974Df7DF012")
+
+
+@pytest.fixture
 def sushiswap_router():
     yield Contract("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
 
