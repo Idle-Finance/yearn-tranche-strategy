@@ -57,9 +57,9 @@ contract TrancheStrategy is BaseStrategy {
         isAATranche = _isAATranche;
         router = _router;
         // can be empaty array
-        rewardTokens = _rewardTokens; // Set `tradeFactory` address after deployment.
+        rewardTokens = _rewardTokens; // set `tradeFactory` address after deployment.
         // can be zero address
-        multiRewards = _multiRewards;
+        multiRewards = _multiRewards; // set `enabledStake` to true to enable stakeing after deployment.
 
         IERC20Metadata _tranche =
             IERC20Metadata(
@@ -76,6 +76,7 @@ contract TrancheStrategy is BaseStrategy {
     }
 
     // ******** PERMISSIONED METHODS ************
+
     /// @notice enable staking
     function enableStaking() external onlyVaultManagers {
         require(tradeFactory != address(0), "strat/tf-zero"); // first set tradeFactory
@@ -84,6 +85,7 @@ contract TrancheStrategy is BaseStrategy {
     }
 
     /// @notice withdraw staked and disable staking
+    /// @dev to revoke multirewards contract use `setMultiRewards` method
     function disableStaking() external onlyVaultManagers {
         enabledStake = false;
         IMultiRewards _multiRewards = multiRewards;
@@ -97,25 +99,36 @@ contract TrancheStrategy is BaseStrategy {
         }
     }
 
+    /// @notice set multirewards contract
+    /// @dev revoke or approve multirewards contract
     function setMultiRewards(IMultiRewards _multiRewards)
         external
         onlyVaultManagers
     {
-        IMultiRewards _oldMultiRewards = multiRewards;
-        multiRewards = _multiRewards;
+        IERC20 _tranche = tranche; // caching
+
+        IMultiRewards _oldMultiRewards = multiRewards; // read old multirewards
+        multiRewards = _multiRewards; // set new multirewards
 
         if (address(_oldMultiRewards) != address(0)) {
-            // exit NOTE: withdrawing amount 0 will cause to revert
+            // exit
+            // NOTE: withdrawing amount 0 will cause to revert
             if (_oldMultiRewards.balanceOf(address(this)) != 0) {
                 _oldMultiRewards.exit();
             }
             // revoke
-            tranche.approve(address(_oldMultiRewards), 0);
+            _tranche.approve(address(_oldMultiRewards), 0);
         }
 
-        // approve
+        // approve & stake
         if (address(_multiRewards) != address(0)) {
-            tranche.approve(address(_multiRewards), type(uint256).max);
+            uint256 trancheBal = _balance(_tranche);
+            _tranche.approve(address(_multiRewards), type(uint256).max); // approve
+
+            // stake
+            if (enabledStake && trancheBal != 0) {
+                _multiRewards.stake(trancheBal);
+            }
         }
     }
 
@@ -130,7 +143,7 @@ contract TrancheStrategy is BaseStrategy {
             _revokeTradeFactoryPermissions();
         }
 
-        rewardTokens = _rewardTokens;
+        rewardTokens = _rewardTokens; // set
 
         if (useTradeFactory) {
             _approveTradeFactory();
@@ -138,6 +151,7 @@ contract TrancheStrategy is BaseStrategy {
     }
 
     /// @dev this strategy must be granted STRATEGY role if `_newTradeFactory` is non-zero address NOTE: https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    ///      to revoke tradeFactory pass address(0) as the parameter
     function updateTradeFactory(address _newTradeFactory)
         public
         onlyGovernance
@@ -146,7 +160,7 @@ contract TrancheStrategy is BaseStrategy {
             _revokeTradeFactoryPermissions();
         }
 
-        tradeFactory = _newTradeFactory;
+        tradeFactory = _newTradeFactory; // set
 
         if (_newTradeFactory != address(0)) {
             _approveTradeFactory();
@@ -164,7 +178,7 @@ contract TrancheStrategy is BaseStrategy {
         IERC20 _rewardToken;
         for (uint256 i; i < length; i++) {
             _rewardToken = _rewardTokens[i];
-            _rewardToken.safeApprove(address(tradeFactory), type(uint256).max);
+            _rewardToken.safeApprove(address(tf), type(uint256).max);
             // this strategy must be granted STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
             tf.enable(address(_rewardToken), _want);
         }
@@ -346,8 +360,7 @@ contract TrancheStrategy is BaseStrategy {
         uint256 wantBal = _balance(want);
 
         if (wantBal > _debtOutstanding) {
-            uint256 amountToDeposit = wantBal - _debtOutstanding; // no underflow
-            _invest(amountToDeposit);
+            _invest(wantBal - _debtOutstanding); // no underflow
         }
     }
 
@@ -384,14 +397,20 @@ contract TrancheStrategy is BaseStrategy {
         _liquidatedAmount = _amountNeeded.sub(_loss);
     }
 
+    /**
+     * Liquidate everything and returns the amount that got freed.
+     * This function is used during emergency exit instead of `prepareReturn()` to
+     * liquidate all of the Strategy's positions back to the Vault.
+     *
+     * @dev `amountFeed` is total balance held by the strategy incl. any prior balance
+     */
     function liquidateAllPositions()
         internal
         override
         returns (uint256 amountFreed)
     {
         // TODO: Liquidate all positions and return the amount freed.
-        uint256 totalTranches = totalTranches();
-        _divest(totalTranches);
+        _divest(totalTranches());
         amountFreed = _balance(want);
     }
 
@@ -515,17 +534,18 @@ contract TrancheStrategy is BaseStrategy {
         IERC20 _want = want;
 
         if (enabledStake) {
-            IMultiRewards _multiRewards = multiRewards;
-
             uint256 trancheBal = _balance(tranche);
-            uint256 stakedBal = _multiRewards.balanceOf(address(this));
 
             // if tranche to withdraw > current balance, withdraw
             if (_trancheAmount > trancheBal) {
+                IMultiRewards _multiRewards = multiRewards;
+                uint256 stakedBal = _multiRewards.balanceOf(address(this));
+
                 uint256 toWithdraw =
                     stakedBal >= _trancheAmount - trancheBal // should be stakedBal == _trancheAmount - trancheBal
                         ? _trancheAmount - trancheBal // no underflow
                         : stakedBal;
+                // withdraw
                 if (toWithdraw != 0) {
                     _multiRewards.withdraw(toWithdraw);
                 }
