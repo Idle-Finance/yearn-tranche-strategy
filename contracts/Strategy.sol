@@ -455,8 +455,14 @@ contract TrancheStrategy is BaseStrategy {
         override
         returns (address[] memory)
     {
-        address[] memory protected = new address[](1);
-        protected[0] = address(tranche);
+        IERC20[] memory _rewardTokens = rewardTokens;
+        uint256 length = _rewardTokens.length;
+        address[] memory protected = new address[](length + 1);
+
+        for (uint256 i; i < length; i++) {
+            protected[i] = address(_rewardTokens[i]);
+        }
+        protected[length + 1] = address(tranche);
 
         return protected;
     }
