@@ -1,5 +1,5 @@
 import pytest
-from brownie import config, Contract
+from brownie import config, Contract, interface
 
 STRATEGY_CONFIGS = {
     "WETH": {
@@ -30,7 +30,7 @@ def strategy_config(request):
 @pytest.fixture
 def token(strategy_config):
     # this should be the address of the ERC-20 used by the strategy/vault (DAI)
-    yield Contract(strategy_config["token_address"])
+    yield interface.ERC20(strategy_config["token_address"])
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def steth_price_feed():
 
 @pytest.fixture
 def underlying_token(strategy_config):
-    yield Contract(strategy_config["idleCDO"]['underlying_token'])
+    yield interface.ERC20(strategy_config["idleCDO"]['underlying_token'])
 
 
 @pytest.fixture
@@ -94,13 +94,13 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, staking_reward, StEthTrancheStrategy, multi_rewards, ymechs_safe):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, staking_reward, StEthTrancheStrategy, multi_rewards, ymechs_safe, healthCheck):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = StEthTrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards
+        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, healthCheck
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
