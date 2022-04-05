@@ -1,5 +1,5 @@
 import pytest
-from brownie import config, Contract
+from brownie import config, Contract, interface
 
 STRATEGY_CONFIGS = {
     "DAI": {
@@ -8,20 +8,20 @@ STRATEGY_CONFIGS = {
         },
         "tranche_type": "AA",
         "whale": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
-        "token_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F  ",
-        "amount": 10000 * 1e18,
+        "token_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "amount": 10000000 * 1e18,
         "strategy": "TrancheStrategy"
     },
-    # "FEI": {
-    #     "idleCDO": {
-    #         "address": "0x77648a2661687ef3b05214d824503f6717311596"
-    #     },
-    #     "tranche_type": "AA",
-    #     "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
-    #     "token_address": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA  ",
-    #     "amount": 10000 * 1e18
-    #     "strategy": "TrancheStrategy"
-    # },
+    "FEI": {
+        "idleCDO": {
+            "address": "0x77648A2661687ef3B05214d824503F6717311596"
+        },
+        "tranche_type": "AA",
+        "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+        "token_address": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA",
+        "amount": 10000000 * 1e18,
+        "strategy": "TrancheStrategy"
+    },
 }
 
 
@@ -36,7 +36,8 @@ def strategy_config(request):
 @pytest.fixture
 def token(strategy_config):
     # this should be the address of the ERC-20 used by the strategy/vault (DAI)
-    yield Contract(strategy_config["token_address"])
+    # yield Contract(strategy_config["token_address"])
+    yield interface.ERC20(strategy_config["token_address"])
 
 
 @pytest.fixture

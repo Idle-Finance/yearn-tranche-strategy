@@ -1,5 +1,5 @@
 import pytest
-from brownie import Contract
+from brownie import Contract, interface
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def sushiswap_router():
 
 @pytest.fixture
 def weth():
-    yield Contract("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+    yield interface.ERC20("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def weth_amout(user, weth):
 
 @pytest.fixture
 def trade_factory():
-    # yield Contract("0xBf26Ff7C7367ee7075443c4F95dEeeE77432614d")s
+    # yield Contract("0xBf26Ff7C7367ee7075443c4F95dEeeE77432614d")
     yield Contract("0x99d8679bE15011dEAD893EB4F5df474a4e6a8b29")
 
 

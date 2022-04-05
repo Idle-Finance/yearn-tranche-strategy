@@ -1,5 +1,5 @@
 import pytest
-from brownie import config, Contract
+from brownie import config, Contract, interface
 
 STRATEGY_CONFIGS = {
     "WETH": {
@@ -30,7 +30,7 @@ def strategy_config(request):
 @pytest.fixture
 def token(strategy_config):
     # this should be the address of the ERC-20 used by the strategy/vault (DAI)
-    yield Contract(strategy_config["token_address"])
+    yield interface.ERC20(strategy_config["token_address"])
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def steth_price_feed():
 
 @pytest.fixture
 def underlying_token(strategy_config):
-    yield Contract(strategy_config["idleCDO"]['underlying_token'])
+    yield interface.ERC20(strategy_config["idleCDO"]['underlying_token'])
 
 
 @pytest.fixture
