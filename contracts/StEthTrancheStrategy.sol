@@ -144,7 +144,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         require(isSafe, "strat/price-unsafe");
 
         uint256 amountsInStEth = super._tranchesInWant(_tranche, trancheAmount);
-        return amountsInStEth.mul(stEthPrice).div(_EXP_SCALE);
+        return amountsInStEth.mul(stEthPrice).div(EXP_SCALE);
     }
 
     /// @dev for debugging
@@ -164,7 +164,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         require(isSafe, "strat/price-unsafe");
 
         // wantAmount to stEthAmount (underlyingAmount)
-        uint256 stEthAmount = wantAmount.mul(_EXP_SCALE).div(stEthPrice);
+        uint256 stEthAmount = wantAmount.mul(EXP_SCALE).div(stEthPrice);
         // underlying to tranche amount
         return _underlyingTokensInTranche(_tranche, stEthAmount);
     }

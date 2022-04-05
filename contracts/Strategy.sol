@@ -22,7 +22,8 @@ contract TrancheStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
 
-    uint256 internal immutable _EXP_SCALE;
+    /// @dev `tranche` have fixed 18 decimals regardless of the underlying
+    uint256 internal constant EXP_SCALE = 1e18;
 
     IWETH internal constant WETH =
         IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -52,7 +53,10 @@ contract TrancheStrategy is BaseStrategy {
         IMultiRewards _multiRewards,
         address _healthCheck
     ) public BaseStrategy(_vault) {
-        require(address(_router) != address(0), "strat/zero-address");
+        require(
+            address(_router) != address(0) || _healthCheck != address(0),
+            "strat/zero-address"
+        );
 
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
@@ -68,7 +72,10 @@ contract TrancheStrategy is BaseStrategy {
                 _isAATranche ? _idleCDO.AATranche() : _idleCDO.BBTranche()
             );
         tranche = _tranche;
-        _EXP_SCALE = 10**uint256(_tranche.decimals());
+
+        // tranche would have fixed 18 decimals regardless of underlying
+        // `EXP_SCALE` is fixed
+        require(_tranche.decimals() == 18, "strat/decimals-18");
 
         want.safeApprove(address(_idleCDO), type(uint256).max);
 
@@ -615,8 +622,9 @@ contract TrancheStrategy is BaseStrategy {
         returns (uint256)
     {
         if (trancheAmount == 0) return 0;
+        // price has the same decimals as underlying
         uint256 price = idleCDO.virtualPrice(address(_tranche));
-        return trancheAmount.mul(price).div(_EXP_SCALE);
+        return trancheAmount.mul(price).div(EXP_SCALE);
     }
 
     /// @dev convert `wantAmount` denominated in `tranche`
@@ -637,7 +645,7 @@ contract TrancheStrategy is BaseStrategy {
     ) internal view returns (uint256) {
         if (underlyingTokens == 0) return 0;
         return
-            underlyingTokens.mul(_EXP_SCALE).div(
+            underlyingTokens.mul(EXP_SCALE).div(
                 idleCDO.virtualPrice(address(_tranche))
             );
     }
