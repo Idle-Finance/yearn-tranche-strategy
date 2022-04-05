@@ -469,7 +469,7 @@ contract TrancheStrategy is BaseStrategy {
         for (uint256 i; i < length; i++) {
             protected[i] = address(_rewardTokens[i]);
         }
-        protected[length + 1] = address(tranche);
+        protected[length] = address(tranche);
 
         return protected;
     }
