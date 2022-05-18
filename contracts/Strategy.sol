@@ -11,6 +11,7 @@ import {
 
 import "../interfaces/idle/IIdleCDO.sol";
 import "../interfaces/idle/IMultiRewards.sol";
+import "../interfaces/idle/LiquidityGaugeV3.sol";
 import "../interfaces/uniswap/IUniswapV2Router02.sol";
 import "../interfaces/yswap/ITradeFactory.sol";
 import "../interfaces/IERC20Metadata.sol";
@@ -36,13 +37,18 @@ contract TrancheStrategy is BaseStrategy {
 
     IMultiRewards public multiRewards;
 
-    bool public immutable isAATranche;
+    /// @dev https://github.com/Idle-Finance/idle-gauges/tree/main/contracts
+    LiquidityGaugeV3 public gauge;
 
-    bool public enabledStake;
+    bool public immutable isAATranche;
 
     address public tradeFactory;
 
     IERC20[] internal rewardTokens;
+
+    enum StakingType { Disabled, Gauge, MultiRewards }
+
+    StakingType public stakingType;
 
     constructor(
         address _vault,
@@ -87,24 +93,72 @@ contract TrancheStrategy is BaseStrategy {
     // ******** PERMISSIONED METHODS ************
 
     /// @notice enable staking
-    function enableStaking() external onlyVaultManagers {
+    function enableStaking(StakingType _type) external onlyVaultManagers {
         require(tradeFactory != address(0), "strat/tf-zero"); // first set tradeFactory
-        require(address(multiRewards) != address(0), "strat/multirewards-zero"); // first set multiRewards
-        enabledStake = true;
+        stakingType = _type;
+
+        if (StakingType.Gauge == _type) {
+            require(address(gauge) != address(0), "strat/gauge-zero"); // first set gauge
+        } else if (StakingType.MultiRewards == _type) {
+            require(
+                address(multiRewards) != address(0),
+                "strat/multirewards-zero"
+            );
+        } else revert("strat/invalid-type");
     }
 
     /// @notice withdraw staked and disable staking
     /// @dev to revoke multirewards contract use `setMultiRewards` method
     function disableStaking() external onlyVaultManagers {
-        enabledStake = false;
+        stakingType = StakingType.Disabled; // reset
+
+        LiquidityGaugeV3 _gauge = gauge;
+
+        if (address(_gauge) != address(0)) {
+            uint256 bal = _gauge.balanceOf(address(this));
+            if (bal != 0) {
+                _gauge.withdraw(bal, true);
+            }
+        }
+
         IMultiRewards _multiRewards = multiRewards;
-        // exit
+        // Exit
         // NOTE: withdrawing amount 0 will cause to revert
         if (
             address(_multiRewards) != address(0) &&
             _multiRewards.balanceOf(address(this)) != 0
         ) {
             _multiRewards.exit();
+        }
+    }
+
+    /// @notice set multirewards contract
+    /// @dev revoke or approve multirewards contract
+    function setGauge(LiquidityGaugeV3 _gauge) external onlyVaultManagers {
+        IERC20 _tranche = tranche; // caching
+
+        LiquidityGaugeV3 _oldGauge = gauge; // read old multirewards
+        gauge = _gauge; // set new multirewards
+
+        if (address(_oldGauge) != address(0)) {
+            // Exit
+            uint256 bal = _oldGauge.balanceOf(address(this));
+            if (bal != 0) {
+                _oldGauge.withdraw(bal, true);
+            }
+            // revoke
+            _tranche.approve(address(_oldGauge), 0);
+        }
+
+        // approve & stake
+        if (address(_gauge) != address(0)) {
+            uint256 trancheBal = _balance(_tranche);
+            _tranche.approve(address(_gauge), type(uint256).max); // approve
+
+            // stake
+            if (stakingType == StakingType.Gauge && trancheBal != 0) {
+                _gauge.deposit(trancheBal, address(this), false);
+            }
         }
     }
 
@@ -120,7 +174,7 @@ contract TrancheStrategy is BaseStrategy {
         multiRewards = _multiRewards; // set new multirewards
 
         if (address(_oldMultiRewards) != address(0)) {
-            // exit
+            // Exit
             // NOTE: withdrawing amount 0 will cause to revert
             if (_oldMultiRewards.balanceOf(address(this)) != 0) {
                 _oldMultiRewards.exit();
@@ -135,7 +189,7 @@ contract TrancheStrategy is BaseStrategy {
             _tranche.approve(address(_multiRewards), type(uint256).max); // approve
 
             // stake
-            if (enabledStake && trancheBal != 0) {
+            if (StakingType.MultiRewards == stakingType && trancheBal != 0) {
                 _multiRewards.stake(trancheBal);
             }
         }
@@ -341,9 +395,7 @@ contract TrancheStrategy is BaseStrategy {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
 
-        if (enabledStake) {
-            _claimRewards();
-        }
+        _claimRewards();
 
         uint256 wantBal = _balance(want);
 
@@ -408,14 +460,22 @@ contract TrancheStrategy is BaseStrategy {
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
         IERC20 _tranche = tranche;
 
+        // --- gauge ---
+        LiquidityGaugeV3 _gauge = gauge;
+
+        uint256 toWithdraw = _gauge.balanceOf(address(this));
+        if (toWithdraw != 0) _gauge.withdraw(toWithdraw, false);
+
+        // --- multirewards ---
         IMultiRewards _multiRewards = multiRewards;
 
-        // withdrawing amount 0 will cause to revert
+        // trying to withdraw zero amount will cause to revert
         // exit regardless of `enabledStake` flag
         if (_multiRewards.balanceOf(address(this)) != 0) {
             _multiRewards.exit();
         }
 
+        // transfer funds
         uint256 trancheBalance = _balance(_tranche);
         if (trancheBalance != 0) {
             _tranche.safeTransfer(_newStrategy, trancheBalance);
@@ -527,7 +587,11 @@ contract TrancheStrategy is BaseStrategy {
 
         trancheMinted = _balance(_tranche).sub(before);
 
-        if (enabledStake && trancheMinted != 0) {
+        if (StakingType.Gauge == stakingType && trancheMinted != 0) {
+            gauge.deposit(trancheMinted, address(this), false);
+        } else if (
+            StakingType.MultiRewards == stakingType && trancheMinted != 0
+        ) {
             multiRewards.stake(trancheMinted);
         }
     }
@@ -542,25 +606,30 @@ contract TrancheStrategy is BaseStrategy {
     {
         IERC20 _want = want;
 
-        if (enabledStake) {
-            uint256 trancheBal = _balance(tranche);
+        uint256 trancheBal = _balance(tranche);
 
-            // if tranche to withdraw > current balance, withdraw
-            if (_trancheAmount > trancheBal) {
-                IMultiRewards _multiRewards = multiRewards;
-                uint256 stakedBal = _multiRewards.balanceOf(address(this));
+        if (_trancheAmount > trancheBal) {
+            if (StakingType.Gauge == stakingType) {
+                LiquidityGaugeV3 _gauge = gauge;
 
+                uint256 stakedBal = _gauge.balanceOf(address(this));
                 uint256 toWithdraw =
-                    stakedBal >= _trancheAmount - trancheBal // should be stakedBal == _trancheAmount - trancheBal
-                        ? _trancheAmount - trancheBal // no underflow
-                        : stakedBal;
-                // withdraw
-                if (toWithdraw != 0) {
-                    _multiRewards.withdraw(toWithdraw);
-                }
+                    _toWithdraw(_trancheAmount, trancheBal, stakedBal);
+
+                // if tranche to withdraw > current balance, withdraw
+                if (toWithdraw != 0) _gauge.withdraw(toWithdraw, false);
+            } else if (StakingType.MultiRewards == stakingType) {
+                IMultiRewards _multiRewards = multiRewards;
+
+                uint256 stakedBal = _multiRewards.balanceOf(address(this));
+                uint256 toWithdraw =
+                    _toWithdraw(_trancheAmount, trancheBal, stakedBal);
+
+                // if tranche to withdraw > current balance, withdraw
+                if (toWithdraw != 0) _multiRewards.withdraw(toWithdraw);
             }
         }
-
+        // if tranche to withdraw > current balance, withdraw
         uint256 before = _balance(_want);
 
         _withdrawTranche(_trancheAmount);
@@ -568,9 +637,24 @@ contract TrancheStrategy is BaseStrategy {
         wantRedeemed = _balance(_want).sub(before);
     }
 
+    function _toWithdraw(
+        uint256 _trancheAmount,
+        uint256 _trancheBal,
+        uint256 _stakedBal
+    ) private view returns (uint256) {
+        return
+            _stakedBal >= _trancheAmount - _trancheBal // should be _stakedBal == _trancheAmount - _trancheBal
+                ? _trancheAmount - _trancheBal // no underflow
+                : _stakedBal;
+    }
+
     /// @notice claim liquidity mining rewards
     function _claimRewards() internal virtual {
-        multiRewards.getReward();
+        if (StakingType.Gauge == stakingType) {
+            gauge.claim_rewards(address(this), address(this));
+        } else if (StakingType.MultiRewards == stakingType) {
+            multiRewards.getReward();
+        }
     }
 
     /// @notice deposit specified underlying amount to idleCDO and mint tranche
