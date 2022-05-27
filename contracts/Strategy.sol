@@ -142,7 +142,7 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @notice set gauge contract
     /// @dev revoke or approve gauge contract
-    function setGauge(LiquidityGaugeV3 _gauge) external onlyVaultManagers {
+    function setGauge(LiquidityGaugeV3 _gauge) external onlyGovernance {
         IERC20 _tranche = tranche; // caching
 
         LiquidityGaugeV3 _oldGauge = gauge; // read old gauge
@@ -174,7 +174,7 @@ contract TrancheStrategy is BaseStrategy {
     /// @dev revoke or approve multirewards contract
     function setMultiRewards(IMultiRewards _multiRewards)
         external
-        onlyVaultManagers
+        onlyGovernance
     {
         IERC20 _tranche = tranche; // caching
 
