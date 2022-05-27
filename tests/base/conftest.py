@@ -1,5 +1,6 @@
 import pytest
-from brownie import config, Contract, interface
+from brownie import config, Contract, interface, ZERO_ADDRESS
+
 
 STRATEGY_CONFIGS = {
     "DAI": {
@@ -12,16 +13,16 @@ STRATEGY_CONFIGS = {
         "amount": 10000000 * 1e18,
         "strategy": "TrancheStrategy"
     },
-    "FEI": {
-        "idleCDO": {
-            "address": "0x77648A2661687ef3B05214d824503F6717311596"
-        },
-        "tranche_type": "AA",
-        "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
-        "token_address": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA",
-        "amount": 10000000 * 1e18,
-        "strategy": "TrancheStrategy"
-    },
+    # "FEI": {
+    #     "idleCDO": {
+    #         "address": "0x77648A2661687ef3B05214d824503F6717311596"
+    #     },
+    #     "tranche_type": "AA",
+    #     "whale": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+    #     "token_address": "0x956F47F50A910163D8BF957Cf5846D573E7f87CA",
+    #     "amount": 1000000 * 1e18,
+    #     "strategy": "TrancheStrategy"
+    # },
 }
 
 
@@ -68,13 +69,13 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, trade_factory, multi_rewards, staking_reward, ymechs_safe, healthCheck):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, trade_factory, multi_rewards, staking_reward, ymechs_safe, gauge, healthCheck):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = TrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, healthCheck
+        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, gauge, healthCheck
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
@@ -84,7 +85,7 @@ def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy
     strategy.updateTradeFactory(trade_factory, {"from": gov})
     rewards = [staking_reward]  # Example rewards
     strategy.setRewardTokens(rewards, {"from": gov})
-    strategy.enableStaking({"from": gov})
+    strategy.enableStaking(2, {"from": gov})  # Multirewards
     yield strategy
 
 
@@ -101,6 +102,14 @@ def multi_rewards(MultiRewards, idleCDO, strategy_config, gov, staking_reward):
                             3600 * 24 * 180, {"from": gov})
     multi_rewards.notifyRewardAmount(staking_reward, 1e25, {"from": gov})
     yield multi_rewards
+
+
+@pytest.fixture
+def gauge(strategy_config, LiquidityGaugeV3):
+    if "gauge" in strategy_config["idleCDO"]:
+        yield Contract(strategy_config["idleCDO"]["gauge"])
+    else:
+        yield ZERO_ADDRESS
 
 
 @pytest.fixture(scope="session")

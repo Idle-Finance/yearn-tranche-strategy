@@ -12,5 +12,5 @@ interface LiquidityGaugeV3 {
 
     function claim_rewards(address account, address receiver) external;
 
-    function balanceOf(address account) external returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
 }

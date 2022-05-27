@@ -1,7 +1,7 @@
 import pytest
 
 
-def test_operation(
+def test_operation_multirewards(
     chain, accounts, token, vault, strategy, user, amount, idleCDO, multi_rewards, staking_reward, RELATIVE_APPROX
 ):
     # Deposit to the vault
@@ -34,3 +34,9 @@ def test_operation(
     assert pytest.approx(
         multi_rewards.balanceOf(strategy), rel=RELATIVE_APPROX
     ) == amount * 1e18 / price
+
+
+def test_operation_gauge(
+    chain, accounts, token, vault, strategy, user, amount, idleCDO, multi_rewards, staking_reward, RELATIVE_APPROX
+):
+    pass

@@ -2,6 +2,7 @@
 #       Use another copy of the strategy to simulate the migration
 #       Show that nothing is lost!
 
+from brownie import Contract, ZERO_ADDRESS
 import pytest
 
 
@@ -19,6 +20,7 @@ def test_migration(
     strategy_config,
     sushiswap_router,
     multi_rewards,
+    gauge,
     healthCheck,
     RELATIVE_APPROX,
 ):
@@ -33,7 +35,8 @@ def test_migration(
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        TrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, healthCheck)
+        TrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, ZERO_ADDRESS, healthCheck
+    )
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
     assert (
         pytest.approx(new_strategy.estimatedTotalAssets(),

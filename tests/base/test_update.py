@@ -3,17 +3,24 @@ import brownie
 
 
 def test_enable_disable_staking(
-    chain, token, vault, strategy, user, management, gov, trade_factory
+    chain, token, vault, strategy, user, management
 ):
-    strategy.enableStaking({"from": management})
-    assert strategy.enabledStake() is True
+    strategy.enableStaking(2, {"from": management})
+    assert strategy.enabledStake() == 2
+
+    if strategy.gauge() == ZERO_ADDRESS:
+        with brownie.reverts():
+            strategy.enableStaking(1, {"from": management})
+    else:
+        strategy.enableStaking(1, {"from": management})
+        assert strategy.enabledStake() == 1
 
     strategy.disableStaking({"from": management})
-    assert strategy.enabledStake() is False
+    assert strategy.enabledStake() == 0
 
     with brownie.reverts():
-        strategy.enableStaking({"from": user})
-    assert strategy.enabledStake() is False
+        strategy.enableStaking(2, {"from": user})
+    assert strategy.enabledStake() == 1
 
 
 def test_update_reward_tokens(

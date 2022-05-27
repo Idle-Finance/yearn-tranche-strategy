@@ -54,6 +54,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
         IMultiRewards _multiRewards,
+        LiquidityGaugeV3 _gauge,
         address _healthCheck
     )
         public
@@ -64,6 +65,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
             _router,
             _rewardTokens,
             _multiRewards,
+            _gauge,
             _healthCheck
         )
     {
@@ -121,11 +123,17 @@ contract StEthTrancheStrategy is TrancheStrategy {
         // steth => eth
         uint256 slippageAllowance =
             _amountIn.mul(DENOMINATOR.sub(maximumSlippage)).div(DENOMINATOR);
+        // emit LogUint(_amountIn);
+        // emit LogUint(slippageAllowance);
+        // uint256 out = stableSwapSTETH.get_dy(STETHID, WETHID, _amountIn);
+        // emit LogUint(out);
         stableSwapSTETH.exchange(STETHID, WETHID, _amountIn, slippageAllowance);
 
         // eth => weth
         WETH.deposit{ value: address(this).balance }();
     }
+
+    // event LogUint(uint256);
 
     /// @dev NOTE: Unreliable price
     function ethToWant(uint256 _amount) public view override returns (uint256) {

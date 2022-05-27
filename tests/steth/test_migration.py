@@ -21,30 +21,32 @@ def test_migration(
     sushiswap_router,
     steth_price_feed,
     multi_rewards,
+    gauge,
+    healthCheck,
     RELATIVE_APPROX,
 ):
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
 
     chain.sleep(1)
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
 
     assert pytest.approx(
         strategy.estimatedTotalAssets(),
         rel=RELATIVE_APPROX
-    ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+    ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
 
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        StEthTrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards)
+        StEthTrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, gauge, healthCheck)
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
 
     assert (
         pytest.approx(
             new_strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )

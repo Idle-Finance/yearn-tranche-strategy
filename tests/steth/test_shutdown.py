@@ -13,7 +13,6 @@ from util import get_estimate_total_assets
 #     token.approve(vault.address, amount, {"from": user})
 #     vault.deposit(amount, {"from": user})
 #     assert token.balanceOf(vault.address) == amount
-#     tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
 # 
 #     if token.balanceOf(user) > 0:
 #         token.transfer(ZERO_ADDRESS, token.balanceOf(user), {"from": user})
@@ -22,12 +21,13 @@ from util import get_estimate_total_assets
 #     strategy.harvest()
 #     chain.sleep(3600 * 7)
 #     chain.mine(1)
+#     minted_tranche = strategy.totalTranches()
 
 #     assert (
 #         pytest.approx(
 #             strategy.estimatedTotalAssets(),
 #             rel=RELATIVE_APPROX
-#         ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+#         ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
 #     )
 #     # Set Emergency
 #     vault.setEmergencyShutdown(True)
@@ -53,16 +53,16 @@ def test_vault_shutdown_can_withdraw(
         token.transfer(ZERO_ADDRESS, token.balanceOf(user), {"from": user})
 
     # Harvest 1: Send funds through the strategy
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
     chain.sleep(3600 * 7)
     chain.mine(1)
+    minted_tranche = strategy.totalTranches()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
     days = 14
     chain.sleep(days * 24 * 60 * 60)
@@ -89,17 +89,17 @@ def test_basic_shutdown(
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
     assert token.balanceOf(vault.address) == amount
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
 
     # Harvest 1: Send funds through the strategy
     strategy.harvest()
     chain.mine(100)
+    minted_tranche = strategy.totalTranches()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
     # Earn interest
     chain.sleep(3600 * 24 * 1)  # Sleep 1 day

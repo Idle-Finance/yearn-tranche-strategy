@@ -1,5 +1,5 @@
 import pytest
-from brownie import config, Contract, interface
+from brownie import config, Contract, interface, ZERO_ADDRESS
 
 STRATEGY_CONFIGS = {
     "WETH": {
@@ -7,6 +7,11 @@ STRATEGY_CONFIGS = {
             "address": "0x34dcd573c5de4672c8248cd12a99f875ca112ad8",  # StETH tranche IdleCDO
             "underlying_token": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",  # steth
             "strat_token": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",  # wsteth
+            "gauge": {
+                "address": "0x675eC042325535F6e176638Dd2d4994F645502B9",
+                "reward": '0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32'
+            },
+            "multirewards": "0xA357AF9430e4504419A7A05e217D4A490Ecec6FA",
         },
         "tranche_type": "AA",
         # Axie Infinity: Ronin Bridge
@@ -94,13 +99,14 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, staking_reward, StEthTrancheStrategy, multi_rewards, ymechs_safe, healthCheck):
+def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, trade_factory, staking_reward, StEthTrancheStrategy, multi_rewards, ymechs_safe, gauge, healthCheck):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = StEthTrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, healthCheck
+        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [
+        ], multi_rewards, gauge, healthCheck
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
@@ -110,23 +116,42 @@ def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy
     strategy.updateTradeFactory(trade_factory, {"from": gov})
     rewards = [staking_reward]  # Example rewards
     strategy.setRewardTokens(rewards, {"from": gov})
-    strategy.enableStaking({"from": gov})
+    strategy.enableStaking(2, {"from": gov})
     yield strategy
 
 
 @pytest.fixture
 def multi_rewards(MultiRewards, idleCDO, strategy_config, gov, staking_reward):
-    is_AA = strategy_config['tranche_type'] == 'AA'
-    multi_rewards = gov.deploy(
-        MultiRewards, gov, idleCDO.AATranche() if is_AA else idleCDO.BBTranche()
-    )
-    staking_reward.mint(gov, 1e25)
-    staking_reward.approve(multi_rewards, 1e25, {"from": gov})
+    if "multirewards" in strategy_config["idleCDO"] and strategy_config["idleCDO"]["multirewards"] != ZERO_ADDRESS:
+        yield MultiRewards.at(strategy_config["idleCDO"]["multirewards"])
+    else:
+        is_AA = strategy_config['tranche_type'] == 'AA'
+        multi_rewards = gov.deploy(
+            MultiRewards, gov, idleCDO.AATranche() if is_AA else idleCDO.BBTranche()
+        )
+        staking_reward.mint(gov, 1e25)
+        staking_reward.approve(multi_rewards, 1e25, {"from": gov})
 
-    multi_rewards.addReward(staking_reward, gov,
-                            3600 * 24 * 180, {"from": gov})
-    multi_rewards.notifyRewardAmount(staking_reward, 1e25, {"from": gov})
-    yield multi_rewards
+        multi_rewards.addReward(staking_reward, gov,
+                                3600 * 24 * 180, {"from": gov})
+        multi_rewards.notifyRewardAmount(staking_reward, 1e25, {"from": gov})
+        yield multi_rewards
+
+
+@pytest.fixture
+def gauge(strategy_config):
+    if "gauge" in strategy_config["idleCDO"]:
+        yield Contract(strategy_config["idleCDO"]["gauge"]["address"])
+    else:
+        yield ZERO_ADDRESS
+
+
+@pytest.fixture
+def gauge_reward(strategy_config):
+    if "gauge" in strategy_config["idleCDO"]:
+        yield interface.ERC20(strategy_config["idleCDO"]["gauge"]["reward"])
+    else:
+        yield interface.ERC20(ZERO_ADDRESS)
 
 
 @pytest.fixture(scope="session")

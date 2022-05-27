@@ -13,14 +13,14 @@ def test_operation_reverts(
 
     # harvest
     chain.sleep(1)
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
 
     # tend()
@@ -34,7 +34,7 @@ def test_operation_reverts(
 
 
 def test_operation(
-    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, underlying_token,
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, underlying_token, keeper
 ):
     # Deposit to the vault
     user_balance_before = token.balanceOf(user)
@@ -44,14 +44,14 @@ def test_operation(
 
     # harvest
     chain.sleep(1)
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
 
     # tend()
@@ -61,39 +61,42 @@ def test_operation(
     chain.sleep(3600 * 12)  # 12 hrs needed for profits to unlock
 
     # withdrawal
-    vault.withdraw({"from": user})
+    strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
+    # vault.withdraw(amount, user, 500, {"from": user})
+    vault.withdraw(amount, user, 500, {"from": user})
 
-    # 0.5% max slippage
-    assert (token.balanceOf(user) >= user_balance_before * 0.995)
+    # 5% max slippage
+    assert (token.balanceOf(user) >= user_balance_before * 0.95)
     assert token.balanceOf(strategy) <= 2
     assert underlying_token.balanceOf(strategy) <= 2
 
 
 def test_emergency_exit(
-    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, keeper
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
 
     chain.sleep(1)
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
 
     # set emergency and exit
+    strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
     strategy.setEmergencyExit()
     chain.sleep(1)
     strategy.harvest()
 
     assert strategy.estimatedTotalAssets() <= 2
-    assert token.balanceOf(vault) >= amount * 0.995  # 0.5% max slippage
+    assert token.balanceOf(vault) >= amount * 0.95  # 5% max slippage
 
 
 def test_profitable_harvest(
@@ -106,14 +109,14 @@ def test_profitable_harvest(
 
     # Harvest 1: Send funds through the strategy
     chain.sleep(1)
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
 
     # TODO: Add some code before harvest #2 to simulate earning yield
@@ -139,7 +142,7 @@ def test_profitable_harvest(
 
 
 def test_change_debt(
-    chain, gov, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed
+    chain, gov, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, keeper
 ):
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
@@ -147,12 +150,12 @@ def test_change_debt(
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
 
     chain.sleep(1)
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
     half = int(amount / 2)
 
     estimatedTotalAssetsBefore = get_estimate_total_assets(
-        strategy, steth_price_feed, idleCDO, tranche_price_when_minted, half
+        strategy, steth_price_feed, idleCDO, minted_tranche
     )
     assert (
         pytest.approx(
@@ -161,33 +164,32 @@ def test_change_debt(
         ) == estimatedTotalAssetsBefore
     )
 
+    strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
     vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
 
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
+    minted_tranche = strategy.totalTranches()
     strategy.harvest()
 
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == get_estimate_total_assets(
         strategy,
         steth_price_feed,
         idleCDO,
-        tranche_price_when_minted,
-        half
+        minted_tranche,
     ) + estimatedTotalAssetsBefore
 
     # In order to pass this tests, you will need to implement prepareReturn.
     # TODO: uncomment the following lines.
     vault.updateStrategyDebtRatio(strategy.address, 5_000, {"from": gov})
     chain.sleep(1)
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
     strategy.harvest()
+    minted_tranche = strategy.totalTranches()
 
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == get_estimate_total_assets(
         strategy,
         steth_price_feed,
         idleCDO,
-        tranche_price_when_minted,
-        half
+        minted_tranche
     )
 
 

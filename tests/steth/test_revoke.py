@@ -8,16 +8,16 @@ def test_revoke_strategy_from_vault(
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
 
     chain.sleep(1)
+    minted_tranche = strategy.totalTranches()
     strategy.harvest()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
     vault.revokeStrategy(strategy.address, {"from": gov})
     chain.sleep(1)
@@ -37,16 +37,16 @@ def test_revoke_strategy_from_strategy(
     # Deposit to the vault and harvest
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
-    tranche_price_when_minted = idleCDO.virtualPrice(strategy.tranche())
 
     chain.sleep(1)
+    minted_tranche = strategy.totalTranches()
     strategy.harvest()
 
     assert (
         pytest.approx(
             strategy.estimatedTotalAssets(),
             rel=RELATIVE_APPROX
-        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, tranche_price_when_minted, amount)
+        ) == get_estimate_total_assets(strategy, steth_price_feed, idleCDO, minted_tranche)
     )
     strategy.setEmergencyExit()
     chain.sleep(1)
