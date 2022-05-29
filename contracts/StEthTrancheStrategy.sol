@@ -53,7 +53,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
         bool _isAATranche,
         IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
-        IMultiRewards _multiRewards,
         LiquidityGaugeV3 _gauge,
         address _healthCheck
     )
@@ -64,7 +63,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
             _isAATranche,
             _router,
             _rewardTokens,
-            _multiRewards,
             _gauge,
             _healthCheck
         )

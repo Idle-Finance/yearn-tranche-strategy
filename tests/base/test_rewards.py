@@ -1,9 +1,12 @@
 import pytest
+from brownie import ZERO_ADDRESS
 
 
-def test_operation_multirewards(
-    chain, accounts, token, vault, strategy, user, amount, idleCDO, multi_rewards, staking_reward, RELATIVE_APPROX
+def test_operation_gauge(
+    chain, accounts, token, vault, strategy, user, amount, idleCDO, gauge, staking_reward, RELATIVE_APPROX
 ):
+    if gauge == ZERO_ADDRESS:
+        return
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
     vault.deposit(amount, {"from": user})
@@ -24,7 +27,7 @@ def test_operation_multirewards(
 
     assert staking_reward.balanceOf(strategy) == 0
     assert pytest.approx(
-        multi_rewards.balanceOf(strategy), rel=RELATIVE_APPROX
+        gauge.balanceOf(strategy), rel=RELATIVE_APPROX
     ) == amount * 1e18 / price
 
     # claim rewards
@@ -32,11 +35,5 @@ def test_operation_multirewards(
 
     assert staking_reward.balanceOf(strategy) > 0
     assert pytest.approx(
-        multi_rewards.balanceOf(strategy), rel=RELATIVE_APPROX
+        gauge.balanceOf(strategy), rel=RELATIVE_APPROX
     ) == amount * 1e18 / price
-
-
-def test_operation_gauge(
-    chain, accounts, token, vault, strategy, user, amount, idleCDO, multi_rewards, staking_reward, RELATIVE_APPROX
-):
-    pass

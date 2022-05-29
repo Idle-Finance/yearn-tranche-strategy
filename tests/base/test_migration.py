@@ -35,7 +35,7 @@ def test_migration(
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        TrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], multi_rewards, ZERO_ADDRESS, healthCheck
+        TrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], ZERO_ADDRESS, healthCheck
     )
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
     assert (
