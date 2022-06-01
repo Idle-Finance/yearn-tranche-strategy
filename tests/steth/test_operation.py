@@ -29,8 +29,8 @@ def test_operation_reverts(
     # withdrawal
     # NOTE: This loss protection is put in place to revert if losses from
     #       withdrawing are more than what is considered acceptable.
-    # with brownie.reverts():
-    #     vault.withdraw({"from": user})
+    with brownie.reverts():
+        vault.withdraw({"from": user})
 
 
 def test_operation(
@@ -62,7 +62,6 @@ def test_operation(
 
     # withdrawal
     strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
-    # vault.withdraw(amount, user, 500, {"from": user})
     vault.withdraw(amount, user, 500, {"from": user})
 
     # 5% max slippage
@@ -72,7 +71,7 @@ def test_operation(
 
 
 def test_emergency_exit(
-    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, keeper
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, keeper, management
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -92,6 +91,10 @@ def test_emergency_exit(
     # set emergency and exit
     strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
     strategy.setEmergencyExit()
+    # force emargency exit
+    strategy.setDoHealthCheck(
+        False, {"from": management}
+    )
     chain.sleep(1)
     strategy.harvest()
 
@@ -168,6 +171,10 @@ def test_change_debt(
     vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
 
+    # force emargency exit
+    # strategy.setDoHealthCheck(
+    #     False, {"from": management}
+    # )
     minted_tranche = strategy.totalTranches()
     strategy.harvest()
 
