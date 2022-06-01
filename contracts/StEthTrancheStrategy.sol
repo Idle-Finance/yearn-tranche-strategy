@@ -37,7 +37,10 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
     uint256 public maximumSlippage = 50; // out of 10000. 50 = 0.5%
 
+    bool public isAllowedUnsafePrice;
+
     event UpdateMaxSlippage(uint256 _oldSlippage, uint256 _newSlippage);
+    event ApprovalUnsafePrice(bool _isAllowedUnsafePrice);
 
     receive() external payable {
         require(
@@ -147,7 +150,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         returns (uint256)
     {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
-        require(isSafe, "strat/price-unsafe");
+        require(isSafe || isAllowedUnsafePrice, "strat/price-unsafe");
 
         uint256 amountsInStEth = super._tranchesInWant(_tranche, trancheAmount);
         return amountsInStEth.mul(stEthPrice).div(EXP_SCALE);
@@ -167,7 +170,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         returns (uint256)
     {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
-        require(isSafe, "strat/price-unsafe");
+        require(isSafe || isAllowedUnsafePrice, "strat/price-unsafe");
 
         // wantAmount to stEthAmount (underlyingAmount)
         uint256 stEthAmount = wantAmount.mul(EXP_SCALE).div(stEthPrice);
@@ -182,5 +185,20 @@ contract StEthTrancheStrategy is TrancheStrategy {
         maximumSlippage = _maximumSlippage;
 
         emit UpdateMaxSlippage(oldMaximumSlippage, _maximumSlippage);
+    }
+
+    /// @notice set approval unsafe price
+    function setApprovalUnsafePrice(bool _isAllowedUnsafePrice)
+        external
+        onlyVaultManagers
+    {
+        require(
+            isAllowedUnsafePrice != _isAllowedUnsafePrice,
+            "strat/already-set"
+        );
+
+        isAllowedUnsafePrice = _isAllowedUnsafePrice;
+
+        emit ApprovalUnsafePrice(true);
     }
 }
