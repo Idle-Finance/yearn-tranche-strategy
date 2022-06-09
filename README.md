@@ -60,7 +60,8 @@ ETHERSCAN_TOKEN=<Your Etherscan token>
 
 To add Alchemy as RPC provider:
 ```bash
-brownie networks add Ethereum alchemy-mainnet chainId=1 host=https://eth-mainnet.alchemyapi.io/v2/<ALCHEMY_API_KEY> explorer=https://api.etherscan.io/api muticall2=0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696
+brownie networks add Ethereum alchemy-mainnet chainId=1 host=
+https://eth-mainent.alchemyapi.io/v2/$ALCHEMY_API_KEY@$FORK_BLOCK_NUMBER explorer=https://api.etherscan.io/api muticall2=0x5BA1e12693Dc8F9c48aAD8770482f4739bEeD696
 ```
 
 To set up mainnet forking :

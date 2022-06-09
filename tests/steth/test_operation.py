@@ -29,8 +29,8 @@ def test_operation_reverts(
     # withdrawal
     # NOTE: This loss protection is put in place to revert if losses from
     #       withdrawing are more than what is considered acceptable.
-    # with brownie.reverts():
-    #     vault.withdraw({"from": user})
+    with brownie.reverts():
+        vault.withdraw({"from": user})
 
 
 def test_operation(
@@ -61,18 +61,16 @@ def test_operation(
     chain.sleep(3600 * 12)  # 12 hrs needed for profits to unlock
 
     # withdrawal
-    strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
-    # vault.withdraw(amount, user, 500, {"from": user})
     vault.withdraw(amount, user, 500, {"from": user})
 
-    # 5% max slippage
-    assert (token.balanceOf(user) >= user_balance_before * 0.95)
+    # 0.5% max slippage
+    assert (token.balanceOf(user) >= user_balance_before * 0.995)
     assert token.balanceOf(strategy) <= 2
     assert underlying_token.balanceOf(strategy) <= 2
 
 
 def test_emergency_exit(
-    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, keeper
+    chain, accounts, token, vault, strategy, user, idleCDO, amount, RELATIVE_APPROX, steth_price_feed, keeper, management
 ):
     # Deposit to the vault
     token.approve(vault.address, amount, {"from": user})
@@ -90,13 +88,16 @@ def test_emergency_exit(
     )
 
     # set emergency and exit
-    strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
     strategy.setEmergencyExit()
+    # force emargency exit
+    strategy.setDoHealthCheck(
+        False, {"from": management}
+    )
     chain.sleep(1)
     strategy.harvest()
 
     assert strategy.estimatedTotalAssets() <= 2
-    assert token.balanceOf(vault) >= amount * 0.95  # 5% max slippage
+    assert token.balanceOf(vault) >= amount * 0.995  # 0.5% max slippage
 
 
 def test_profitable_harvest(
@@ -164,7 +165,6 @@ def test_change_debt(
         ) == estimatedTotalAssetsBefore
     )
 
-    strategy.setMaxSlippage(500, {"from": keeper})  # 5 %
     vault.updateStrategyDebtRatio(strategy.address, 10_000, {"from": gov})
     chain.sleep(1)
 
@@ -209,7 +209,7 @@ def test_sweep(gov, vault, strategy, token, user, amount, dai):
     # Protected token doesn't work
     # with brownie.reverts("!protected"):
     #     strategy.sweep(protected_token, {"from": gov})
-    dai_amount = 100 * 1e18
+    dai_amount = dai.balanceOf(user)
     before_balance = dai.balanceOf(gov)
     dai.transfer(strategy, dai_amount, {"from": user})
     assert dai.address != strategy.want()
