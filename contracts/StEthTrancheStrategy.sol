@@ -40,7 +40,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
     bool public isAllowedUnsafePrice;
 
     event UpdateMaxSlippage(uint256 _oldSlippage, uint256 _newSlippage);
-    event ApprovalUnsafePrice(bool _isAllowedUnsafePrice);
+    event UpdateApprovalUnsafePrice(bool _isAllowedUnsafePrice);
 
     receive() external payable {
         require(
@@ -192,13 +192,8 @@ contract StEthTrancheStrategy is TrancheStrategy {
         external
         onlyVaultManagers
     {
-        require(
-            isAllowedUnsafePrice != _isAllowedUnsafePrice,
-            "strat/already-set"
-        );
-
         isAllowedUnsafePrice = _isAllowedUnsafePrice;
 
-        emit ApprovalUnsafePrice(true);
+        emit UpdateApprovalUnsafePrice(_isAllowedUnsafePrice);
     }
 }

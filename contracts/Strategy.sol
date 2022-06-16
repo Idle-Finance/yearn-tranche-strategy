@@ -37,6 +37,11 @@ contract TrancheStrategy is BaseStrategy {
     /// @dev https://github.com/Idle-Finance/idle-gauges/tree/main/contracts
     LiquidityGaugeV3 public gauge;
 
+    /// @notice default: True
+    /// @dev  in case of emergency we have the option to turn it off and
+    /// not interact with gauge during migration if we have to.
+    bool public checkStakedBeforeMigrating = true;
+
     bool public enabledStake;
 
     bool public immutable isAATranche;
@@ -44,6 +49,8 @@ contract TrancheStrategy is BaseStrategy {
     address public tradeFactory;
 
     IERC20[] internal rewardTokens;
+
+    event UpdateCheckStakedBeforeMigrating(bool _checkStakedBeforeMigrating);
 
     constructor(
         address _vault,
@@ -86,6 +93,15 @@ contract TrancheStrategy is BaseStrategy {
     }
 
     // ******** PERMISSIONED METHODS ************
+
+    function setCheckStakedBeforeMigrating(bool _checkStakedBeforeMigrating)
+        external
+        onlyGovernance
+    {
+        checkStakedBeforeMigrating = _checkStakedBeforeMigrating;
+
+        emit UpdateCheckStakedBeforeMigrating(_checkStakedBeforeMigrating);
+    }
 
     /// @notice enable staking
     function enableStaking() external onlyVaultManagers {
@@ -408,7 +424,7 @@ contract TrancheStrategy is BaseStrategy {
         // --- gauge ---
         LiquidityGaugeV3 _gauge = gauge;
 
-        if (address(_gauge) != address(0)) {
+        if (checkStakedBeforeMigrating && address(_gauge) != address(0)) {
             uint256 toWithdraw = _gauge.balanceOf(address(this));
             if (toWithdraw != 0) _gauge.withdraw(toWithdraw, false);
         }
@@ -433,6 +449,7 @@ contract TrancheStrategy is BaseStrategy {
     //      protected[2] = tokenC;
     //      return protected;
     //    }
+    /// @dev in case of emergency we have the option to turn `checkStakedBeforeMigrating` off
     function protectedTokens()
         internal
         view
@@ -442,12 +459,21 @@ contract TrancheStrategy is BaseStrategy {
     {
         IERC20[] memory _rewardTokens = rewardTokens;
         uint256 length = _rewardTokens.length;
-        address[] memory protected = new address[](length + 1);
+
+        address[] memory protected;
+
+        // work successfully
+        if (checkStakedBeforeMigrating) {
+            protected = new address[](length + 1);
+            protected[length] = address(tranche);
+        } else {
+            // escape hatche as we can during an emergency.
+            protected = new address[](length);
+        }
 
         for (uint256 i; i < length; i++) {
             protected[i] = address(_rewardTokens[i]);
         }
-        protected[length] = address(tranche);
 
         return protected;
     }

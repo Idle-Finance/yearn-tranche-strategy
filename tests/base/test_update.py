@@ -1,4 +1,4 @@
-from brownie import ZERO_ADDRESS
+from brownie import ZERO_ADDRESS, Contract
 import brownie
 
 
@@ -50,3 +50,27 @@ def test_update_trade_factory(
     with brownie.reverts():
         strategy.updateTradeFactory(trade_factory, {"from": user})
     assert strategy.tradeFactory() == ZERO_ADDRESS
+
+
+def test_check_staked_before_migrating(
+    chain, token, vault, strategy, user, gov, management, amount
+):
+    # default
+    assert strategy.checkStakedBeforeMigrating() is True
+
+    # only authorized address can call this function
+    with brownie.reverts():
+        strategy.setCheckStakedBeforeMigrating(False, {"from": user})
+
+    # tranches can not be transferred when checkStakedBeforeMigrating is True
+    assert strategy.checkStakedBeforeMigrating() is True
+    with brownie.reverts():
+        strategy.sweep(strategy.tranche(), {"from": gov})
+
+    strategy.setCheckStakedBeforeMigrating(False, {"from": gov})
+    assert strategy.checkStakedBeforeMigrating() is False
+
+    # tranches can not be transferred when checkStakedBeforeMigrating is False
+    total_tranches = strategy.totalTranches()
+    strategy.sweep(strategy.tranche(), {"from": gov})
+    assert Contract(strategy.tranche()).balanceOf(gov) == total_tranches

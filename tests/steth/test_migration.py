@@ -20,7 +20,6 @@ def test_migration(
     strategy_config,
     sushiswap_router,
     steth_price_feed,
-    multi_rewards,
     gauge,
     healthCheck,
     RELATIVE_APPROX,
