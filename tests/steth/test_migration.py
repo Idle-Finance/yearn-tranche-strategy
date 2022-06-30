@@ -3,6 +3,7 @@
 #       Show that nothing is lost!
 
 import pytest
+from brownie import ZERO_ADDRESS
 from util import get_estimate_total_assets
 
 
@@ -10,6 +11,8 @@ def test_migration(
     chain,
     token,
     vault,
+    rewards,
+    keeper,
     strategy,
     amount,
     StEthTrancheStrategy,
@@ -40,7 +43,7 @@ def test_migration(
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        StEthTrancheStrategy, vault, idleCDO, is_AA, sushiswap_router, [], gauge, healthCheck)
+        StEthTrancheStrategy, vault, strategist, rewards, keeper, idleCDO, is_AA, sushiswap_router, [], gauge, ZERO_ADDRESS,  healthCheck)
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
 
     assert (

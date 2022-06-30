@@ -5,7 +5,8 @@ from brownie import config, Contract, interface, ZERO_ADDRESS
 STRATEGY_CONFIGS = {
     "DAI": {
         "idleCDO": {
-            "address": "0xd0dbcd556ca22d3f3c142e9a3220053fd7a247bc"
+            "address": "0xd0dbcd556ca22d3f3c142e9a3220053fd7a247bc",
+            # "gauge": {"address": "", "reward": ""}
         },
         "tranche_type": "AA",
         "whale": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
@@ -69,14 +70,24 @@ def vault(pm, gov, rewards, guardian, management, token):
 
 
 @pytest.fixture
-def strategy(strategist, keeper, vault, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, trade_factory, multi_rewards, staking_reward, ymechs_safe, gauge, healthCheck):
+def strategy(strategist, keeper, vault, rewards, idleCDO, sushiswap_router, gov, strategy_config, TrancheStrategy, trade_factory, multi_rewards, staking_reward, ymechs_safe, gauge, distributor_proxy, healthCheck):
     is_AA = strategy_config['tranche_type'] == 'AA'
 
     _Strategy = TrancheStrategy
     # give contract factory and its constructor parammeters
     strategy = strategist.deploy(
-        _Strategy, vault, idleCDO, is_AA, sushiswap_router, [
-        ], gauge, healthCheck
+        _Strategy,
+        vault,
+        strategist,
+        rewards,
+        keeper,
+        idleCDO,
+        is_AA,
+        sushiswap_router,
+        [],
+        gauge,
+        distributor_proxy,
+        healthCheck
     )
     strategy.setKeeper(keeper)
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
@@ -109,9 +120,17 @@ def multi_rewards(MultiRewards, idleCDO, strategy_config, gov, staking_reward):
 @pytest.fixture
 def gauge(strategy_config):
     if "gauge" in strategy_config["idleCDO"]:
-        yield Contract(strategy_config["idleCDO"]["gauge"])
+        yield Contract(strategy_config["idleCDO"]["gauge"]["address"])
     else:
         yield ZERO_ADDRESS
+
+
+@pytest.fixture
+def gauge_reward(strategy_config):
+    if "gauge" in strategy_config["idleCDO"]:
+        yield interface.ERC20(strategy_config["idleCDO"]["gauge"]["reward"])
+    else:
+        yield interface.ERC20(ZERO_ADDRESS)
 
 
 @pytest.fixture(scope="session")

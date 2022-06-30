@@ -50,23 +50,50 @@ contract StEthTrancheStrategy is TrancheStrategy {
         );
     }
 
+    /**
+     * @notice
+     *  Initializes the Strategy, this is called only once, when the
+     *  contract is deployed.
+     * @dev `_vault` should implement `VaultAPI`.
+     * @param _vault The address of the Vault responsible for this Strategy.
+     * @param _strategist The address to assign as `strategist`.
+     * The strategist is able to change the reward address
+     * @param _rewards  The address to use for pulling rewards.
+     * @param _keeper The adddress of the _keeper. _keeper
+     * can harvest and tend a strategy.
+     * @param _idleCDO  The address of IdleCDO
+     * @param _isAATranche  tranche AA or BB
+     * @param _router  The address to the uni-v2 style router
+     * @param _rewardTokens  The address to be swapped for the want
+     * @param _gauge  The address to the Idle gauge
+     * @param _dp  The address of IDLE distributorProxy
+     * @param _healthCheck  The address to use for health check
+     */
     constructor(
         address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
         IIdleCDO _idleCDO,
         bool _isAATranche,
         IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
-        LiquidityGaugeV3 _gauge,
+        ILiquidityGaugeV3 _gauge,
+        IDistributorProxy _dp,
         address _healthCheck
     )
         public
         TrancheStrategy(
             _vault,
+            _strategist,
+            _rewards,
+            _keeper,
             _idleCDO,
             _isAATranche,
             _router,
             _rewardTokens,
             _gauge,
+            _dp,
             _healthCheck
         )
     {

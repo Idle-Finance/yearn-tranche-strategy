@@ -73,3 +73,8 @@ def ymechs_safe():
 @pytest.fixture
 def staking_reward(ERC20Mock, accounts):
     yield ERC20Mock.deploy({"from": accounts[0]})
+
+
+@pytest.fixture
+def distributor_proxy():
+    yield Contract("0x074306BC6a6Fc1bD02B425dd41D742ADf36Ca9C6")

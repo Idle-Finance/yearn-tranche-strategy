@@ -52,6 +52,31 @@ def test_update_trade_factory(
     assert strategy.tradeFactory() == ZERO_ADDRESS
 
 
+def test_set_dp(
+    chain, token, vault, strategy, user, gov, distributor_proxy
+):
+    dp = distributor_proxy
+    if dp == ZERO_ADDRESS:
+        return
+    strategy.setDistributorProxy(dp, {"from": gov})
+    assert strategy.distributorProxy() == dp
+
+    with brownie.reverts():
+        strategy.setDistributorProxy(dp, {"from": user})
+
+
+def test_set_gauge(
+    chain, token, vault, strategy, user, gov, gauge
+):
+    if gauge == ZERO_ADDRESS:
+        return
+    strategy.setGauge(gauge, {"from": gov})
+    assert strategy.gauge() == gauge
+
+    with brownie.reverts():
+        strategy.setGauge(gauge, {"from": user})
+
+
 def test_check_staked_before_migrating(
     chain, token, vault, strategy, user, gov, management, amount
 ):

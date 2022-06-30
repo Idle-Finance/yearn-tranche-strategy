@@ -10,7 +10,8 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/idle/IIdleCDO.sol";
-import "../interfaces/idle/LiquidityGaugeV3.sol";
+import "../interfaces/idle/ILiquidityGaugeV3.sol";
+import "../interfaces/idle/IDistributorProxy.sol";
 import "../interfaces/uniswap/IUniswapV2Router02.sol";
 import "../interfaces/yswap/ITradeFactory.sol";
 import "../interfaces/IERC20Metadata.sol";
@@ -18,6 +19,16 @@ import "../interfaces/IWETH.sol";
 
 /// @title Base Tranche Strategy
 /// @author bakuchi
+/// @dev in case of emergency,
+/// if Idle Gauge have some problems,
+/// - disable staking to the gauge
+/// - revoke the gauge by calling `setGauge(address(0))`
+/// Migrations
+/// set `checkStakedBeforeMigrating` false by calling `SetCheckStakedBeforeMigrating`
+/// and then `migrate()`
+/// it is possible for vault manageres to mannually invest/dinvest/claimRewards
+/// mannually claiming rewards can bypass `enabledStake` flag check
+
 contract TrancheStrategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
@@ -32,33 +43,67 @@ contract TrancheStrategy is BaseStrategy {
 
     IIdleCDO public immutable idleCDO;
 
+    /// @notice junior or senior
+    bool public immutable isAATranche;
+
+    /// @notice uniswap-v2 compatible router
+    /// @dev router is used to provide an accurate conversion ETH to want
     IUniswapV2Router02 public router;
 
-    /// @dev https://github.com/Idle-Finance/idle-gauges/tree/main/contracts
-    LiquidityGaugeV3 public gauge;
+    /// @notice https://github.com/Idle-Finance/idle-gauges/tree/main/contracts
+    /// @dev tokens will be staked if the `enableStake` is true. some rewards are distributed.
+    ILiquidityGaugeV3 public gauge;
+
+    /// @notice IDLE distributor contract
+    /// @dev  when tokens are staked to gauge, IDLE are claimable
+    IDistributorProxy public distributorProxy;
 
     /// @notice default: True
     /// @dev  in case of emergency we have the option to turn it off and
     /// not interact with gauge during migration if we have to.
     bool public checkStakedBeforeMigrating = true;
 
+    /// @dev we assume gauge address is not zero address if this flag is true.
     bool public enabledStake;
 
-    bool public immutable isAATranche;
-
+    /// @notice yswap ref
     address public tradeFactory;
 
+    /// @dev reward tokens to swap for the want through yswap i.e trade factory
     IERC20[] internal rewardTokens;
 
     event UpdateCheckStakedBeforeMigrating(bool _checkStakedBeforeMigrating);
 
+    /**
+     * @notice
+     *  Initializes the Strategy, this is called only once, when the
+     *  contract is deployed.
+     * @dev `_vault` should implement `VaultAPI`.
+     * @param _vault The address of the Vault responsible for this Strategy.
+     * @param _strategist The address to assign as `strategist`.
+     * The strategist is able to change the reward address
+     * @param _rewards  The address to use for pulling rewards.
+     * @param _keeper The adddress of the _keeper. _keeper
+     * can harvest and tend a strategy.
+     * @param _idleCDO  The address of IdleCDO
+     * @param _isAATranche  tranche AA or BB
+     * @param _router  The address to the uni-v2 style router
+     * @param _rewardTokens  The address to be swapped for the want
+     * @param _gauge  The address to the Idle gauge
+     * @param _dp  The address of IDLE distributorProxy
+     * @param _healthCheck  The address to use for health check
+     */
     constructor(
         address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
         IIdleCDO _idleCDO,
         bool _isAATranche,
         IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
-        LiquidityGaugeV3 _gauge,
+        ILiquidityGaugeV3 _gauge,
+        IDistributorProxy _dp,
         address _healthCheck
     ) public BaseStrategy(_vault) {
         require(
@@ -69,12 +114,20 @@ contract TrancheStrategy is BaseStrategy {
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
         router = _router;
+
         // can be empaty array
         rewardTokens = _rewardTokens; // set `tradeFactory` address after deployment.
+
         // can be zero address
         gauge = _gauge;
+        distributorProxy = _dp;
 
         healthCheck = _healthCheck;
+
+        // BaseStrategy
+        strategist = _strategist;
+        rewards = _rewards;
+        keeper = _keeper;
 
         IERC20Metadata _tranche =
             IERC20Metadata(
@@ -115,23 +168,14 @@ contract TrancheStrategy is BaseStrategy {
     /// @dev to revoke Gauge contract use `setGauge` method
     function disableStaking() external onlyVaultManagers {
         enabledStake = false; // reset
-
-        LiquidityGaugeV3 _gauge = gauge;
-        // Exit
-        if (address(_gauge) != address(0)) {
-            uint256 bal = _gauge.balanceOf(address(this));
-            if (bal != 0) {
-                _gauge.withdraw(bal, true);
-            }
-        }
     }
 
     /// @notice set gauge contract
     /// @dev revoke or approve gauge contract
-    function setGauge(LiquidityGaugeV3 _gauge) external onlyGovernance {
+    function setGauge(ILiquidityGaugeV3 _gauge) external onlyGovernance {
         IERC20 _tranche = tranche; // caching
 
-        LiquidityGaugeV3 _oldGauge = gauge; // read old gauge
+        ILiquidityGaugeV3 _oldGauge = gauge; // read old gauge
         gauge = _gauge; // set new gauge
 
         if (address(_oldGauge) != address(0)) {
@@ -153,6 +197,26 @@ contract TrancheStrategy is BaseStrategy {
             if (enabledStake && trancheBal != 0) {
                 _gauge.deposit(trancheBal, address(this), false);
             }
+        }
+    }
+
+    /// @notice set gauge contract
+    function setDistributorProxy(IDistributorProxy _dp)
+        external
+        onlyGovernance
+    {
+        address _gauge = address(gauge);
+        IDistributorProxy _oldDp = distributorProxy; // read old distributor proxy
+
+        distributorProxy = _dp; // set new distributor proxy
+
+        // Claim
+        if (
+            enabledStake &&
+            address(_oldDp) != address(0) &&
+            _gauge != address(0)
+        ) {
+            _oldDp.distribute(_gauge);
         }
     }
 
@@ -269,7 +333,7 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @notice return staked tranches + tranche balance that this contract holds
     function totalTranches() public view returns (uint256) {
-        LiquidityGaugeV3 _gauge = gauge;
+        ILiquidityGaugeV3 _gauge = gauge;
         uint256 stakedBal;
 
         if (address(_gauge) != address(0)) {
@@ -356,7 +420,9 @@ contract TrancheStrategy is BaseStrategy {
         // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
 
-        _claimRewards();
+        if (enabledStake) {
+            _claimRewards();
+        }
 
         uint256 wantBal = _balance(want);
 
@@ -422,7 +488,7 @@ contract TrancheStrategy is BaseStrategy {
         IERC20 _tranche = tranche;
 
         // --- gauge ---
-        LiquidityGaugeV3 _gauge = gauge;
+        ILiquidityGaugeV3 _gauge = gauge;
 
         if (checkStakedBeforeMigrating && address(_gauge) != address(0)) {
             uint256 toWithdraw = _gauge.balanceOf(address(this));
@@ -570,7 +636,7 @@ contract TrancheStrategy is BaseStrategy {
 
         // if tranche to withdraw > current balance, withdraw
         if (_trancheAmount > trancheBal) {
-            LiquidityGaugeV3 _gauge = gauge;
+            ILiquidityGaugeV3 _gauge = gauge;
 
             uint256 stakedBal = _gauge.balanceOf(address(this));
             uint256 toWithdraw =
@@ -600,8 +666,15 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @notice claim liquidity mining rewards
     function _claimRewards() internal virtual {
-        if (enabledStake) {
-            gauge.claim_rewards(address(this), address(this));
+        IDistributorProxy _dp = distributorProxy;
+        ILiquidityGaugeV3 _gauge = gauge;
+
+        // Claim some rewards
+        _gauge.claim_rewards(address(this), address(this));
+
+        // Claim IDLE
+        if (address(_dp) != address(0)) {
+            _dp.distribute(address(_gauge));
         }
     }
 
