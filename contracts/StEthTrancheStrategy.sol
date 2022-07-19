@@ -2,11 +2,7 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-import {
-    SafeERC20,
-    SafeMath,
-    IERC20
-} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import { SafeERC20, SafeMath, IERC20 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./Strategy.sol";
 
@@ -17,21 +13,14 @@ import "../interfaces/curve/IStEthStableSwap.sol";
 /// @title StETH Tranche Strategy
 /// @author bakuchi
 contract StEthTrancheStrategy is TrancheStrategy {
-    using SafeERC20 for IERC20;
-    using SafeMath for uint256;
+    IStEthStableSwap public constant stableSwapSTETH = IStEthStableSwap(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
 
-    IStEthStableSwap public constant stableSwapSTETH =
-        IStEthStableSwap(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+    IStEthPriceFeed public constant priceFeed = IStEthPriceFeed(0xAb55Bf4DfBf469ebfe082b7872557D1F87692Fe6);
 
-    IStEthPriceFeed public constant priceFeed =
-        IStEthPriceFeed(0xAb55Bf4DfBf469ebfe082b7872557D1F87692Fe6);
-
-    IStETH public constant stETH =
-        IStETH(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+    IStETH public constant stETH = IStETH(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
 
     uint256 private constant DENOMINATOR = 10_000;
-    address private constant REFERRAL =
-        0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814; // Idle finance Treasury League multisig
+    address private constant REFERRAL = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814; // Idle finance Treasury League multisig
     int128 private constant WETHID = 0;
     int128 private constant STETHID = 1;
 
@@ -43,11 +32,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
     event UpdateApprovalUnsafePrice(bool _isAllowedUnsafePrice);
 
     receive() external payable {
-        require(
-            msg.sender == address(WETH) ||
-                msg.sender == address(stableSwapSTETH),
-            "strat/recieve-eth"
-        );
+        require(msg.sender == address(WETH) || msg.sender == address(stableSwapSTETH), "strat/recieve-eth");
     }
 
     /**
@@ -119,12 +104,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         if (out < _amount) {
             stETH.submit{ value: _amount }(REFERRAL);
         } else {
-            stableSwapSTETH.exchange{ value: _amount }(
-                WETHID,
-                STETHID,
-                _amount,
-                _amount
-            );
+            stableSwapSTETH.exchange{ value: _amount }(WETHID, STETHID, _amount, _amount);
         }
         uint256 amountIn = _balance(stETH).sub(_stEthBalanceBefore);
 
@@ -149,8 +129,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
         uint256 _amountIn = _balance(stETH).sub(_stEthBalanceBefore);
 
         // steth => eth
-        uint256 slippageAllowance =
-            _amountIn.mul(DENOMINATOR.sub(maximumSlippage)).div(DENOMINATOR);
+        uint256 slippageAllowance = _amountIn.mul(DENOMINATOR.sub(maximumSlippage)).div(DENOMINATOR);
         // emit LogUint(_amountIn);
         // emit LogUint(slippageAllowance);
         // uint256 out = stableSwapSTETH.get_dy(STETHID, WETHID, _amountIn);
@@ -161,8 +140,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
         WETH.deposit{ value: address(this).balance }();
     }
 
-    // event LogUint(uint256);
-
     /// @dev NOTE: Unreliable price
     function ethToWant(uint256 _amount) public view override returns (uint256) {
         return _amount;
@@ -170,12 +147,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
     /// @dev convert `tranches` denominated in `want`
     /// @notice Usually idleCDO.underlyingToken is equal to the `want`
-    function _tranchesInWant(IERC20 _tranche, uint256 trancheAmount)
-        internal
-        view
-        override
-        returns (uint256)
-    {
+    function _tranchesInWant(IERC20 _tranche, uint256 trancheAmount) internal view override returns (uint256) {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
         require(isSafe || isAllowedUnsafePrice, "strat/price-unsafe");
 
@@ -190,12 +162,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
     /// @dev convert `wantAmount` denominated in `tranche`
     /// NOTE: underlying token is equal to steth here
-    function _wantsInTranche(IERC20 _tranche, uint256 wantAmount)
-        internal
-        view
-        override
-        returns (uint256)
-    {
+    function _wantsInTranche(IERC20 _tranche, uint256 wantAmount) internal view override returns (uint256) {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
         require(isSafe || isAllowedUnsafePrice, "strat/price-unsafe");
 
@@ -215,10 +182,7 @@ contract StEthTrancheStrategy is TrancheStrategy {
     }
 
     /// @notice set approval unsafe price
-    function setApprovalUnsafePrice(bool _isAllowedUnsafePrice)
-        external
-        onlyVaultManagers
-    {
+    function setApprovalUnsafePrice(bool _isAllowedUnsafePrice) external onlyVaultManagers {
         isAllowedUnsafePrice = _isAllowedUnsafePrice;
 
         emit UpdateApprovalUnsafePrice(_isAllowedUnsafePrice);
