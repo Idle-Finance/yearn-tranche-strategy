@@ -37,7 +37,7 @@ def test_migration(
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        TrancheStrategy, vault, strategist, rewards, keeper, idleCDO, is_AA, sushiswap_router, [
+        TrancheStrategy, vault, strategist, rewards, keeper, idleCDO, is_AA, [
         ], ZERO_ADDRESS, ZERO_ADDRESS, healthCheck
     )
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
@@ -84,7 +84,7 @@ def test_staked_migration(
     # migrate to a new strategy
     is_AA = strategy_config['tranche_type'] == 'AA'
     new_strategy = strategist.deploy(
-        TrancheStrategy, vault, strategist, rewards, keeper, idleCDO, is_AA, sushiswap_router, [
+        TrancheStrategy, vault, strategist, rewards, keeper, idleCDO, is_AA, [
         ], ZERO_ADDRESS, ZERO_ADDRESS, healthCheck
     )
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})

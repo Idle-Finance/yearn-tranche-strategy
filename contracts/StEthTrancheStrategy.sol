@@ -2,8 +2,6 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-import { SafeERC20, SafeMath, IERC20 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-
 import "./Strategy.sol";
 
 import "../interfaces/lido/IStETH.sol";
@@ -20,8 +18,11 @@ contract StEthTrancheStrategy is TrancheStrategy {
     IStETH public constant stETH = IStETH(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
 
     uint256 private constant DENOMINATOR = 10_000;
+
     address private constant REFERRAL = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814; // Idle finance Treasury League multisig
+
     int128 private constant WETHID = 0;
+
     int128 private constant STETHID = 1;
 
     uint256 public maximumSlippage = 50; // out of 10000. 50 = 0.5%
@@ -48,7 +49,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
      * can harvest and tend a strategy.
      * @param _idleCDO  The address of IdleCDO
      * @param _isAATranche  tranche AA or BB
-     * @param _router  The address to the uni-v2 style router
      * @param _rewardTokens  The address to be swapped for the want
      * @param _gauge  The address to the Idle gauge
      * @param _dp  The address of IDLE distributorProxy
@@ -61,7 +61,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
         address _keeper,
         IIdleCDO _idleCDO,
         bool _isAATranche,
-        IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
         ILiquidityGaugeV3 _gauge,
         IDistributorProxy _dp,
@@ -75,7 +74,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
             _keeper,
             _idleCDO,
             _isAATranche,
-            _router,
             _rewardTokens,
             _gauge,
             _dp,
@@ -130,10 +128,6 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
         // steth => eth
         uint256 slippageAllowance = _amountIn.mul(DENOMINATOR.sub(maximumSlippage)).div(DENOMINATOR);
-        // emit LogUint(_amountIn);
-        // emit LogUint(slippageAllowance);
-        // uint256 out = stableSwapSTETH.get_dy(STETHID, WETHID, _amountIn);
-        // emit LogUint(out);
         stableSwapSTETH.exchange(STETHID, WETHID, _amountIn, slippageAllowance);
 
         // eth => weth
@@ -147,11 +141,11 @@ contract StEthTrancheStrategy is TrancheStrategy {
 
     /// @dev convert `tranches` denominated in `want`
     /// @notice Usually idleCDO.underlyingToken is equal to the `want`
-    function _tranchesInWant(IERC20 _tranche, uint256 trancheAmount) internal view override returns (uint256) {
+    function _tranchesInWant(IERC20 _tranche, uint256 _trancheAmount) internal view override returns (uint256) {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
         require(isSafe || isAllowedUnsafePrice, "strat/price-unsafe");
 
-        uint256 amountsInStEth = super._tranchesInWant(_tranche, trancheAmount);
+        uint256 amountsInStEth = super._tranchesInWant(_tranche, _trancheAmount);
         return amountsInStEth.mul(stEthPrice).div(EXP_SCALE);
     }
 
@@ -160,14 +154,14 @@ contract StEthTrancheStrategy is TrancheStrategy {
         return _balance(want);
     }
 
-    /// @dev convert `wantAmount` denominated in `tranche`
+    /// @dev convert `_wantAmount` denominated in `tranche`
     /// NOTE: underlying token is equal to steth here
-    function _wantsInTranche(IERC20 _tranche, uint256 wantAmount) internal view override returns (uint256) {
+    function _wantsInTranche(IERC20 _tranche, uint256 _wantAmount) internal view override returns (uint256) {
         (uint256 stEthPrice, bool isSafe) = priceFeed.current_price();
         require(isSafe || isAllowedUnsafePrice, "strat/price-unsafe");
 
-        // wantAmount to stEthAmount (underlyingAmount)
-        uint256 stEthAmount = wantAmount.mul(EXP_SCALE).div(stEthPrice);
+        // _wantAmount to stEthAmount (underlyingAmount)
+        uint256 stEthAmount = _wantAmount.mul(EXP_SCALE).div(stEthPrice);
         // underlying to tranche amount
         return _underlyingTokensInTranche(_tranche, stEthAmount);
     }
