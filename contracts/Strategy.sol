@@ -483,35 +483,8 @@ contract TrancheStrategy is BaseStrategy {
     //      protected[2] = tokenC;
     //      return protected;
     //    }
-    /// @dev in case of emergency we have the option to turn `checkStakedBeforeMigrating` off
-    function protectedTokens() internal view virtual override returns (address[] memory) {
-        IERC20[] memory _rewardTokens = rewardTokens;
-        uint256 length = _rewardTokens.length;
-
-        address[] memory protected;
-
-        // gov can sweep *any token excluding `want`*
-        if (msg.sender == governance()) {
-            return protected;
-        }
-
-        // work successfully
-        if (checkStakedBeforeMigrating) {
-            protected = new address[](length + 2);
-            protected[length] = address(tranche);
-            protected[length + 1] = address(gauge);
-        } else {
-            // escape hatche as we can during an emergency.
-            // skip protecting tranche and gauge token
-            protected = new address[](length);
-        }
-
-        for (uint256 i; i < length; i++) {
-            protected[i] = address(_rewardTokens[i]);
-        }
-
-        return protected;
-    }
+    /// NOTE: Governance can sweep any token except the `want` and `shares`
+    function protectedTokens() internal view virtual override returns (address[] memory protected) {}
 
     /**
      * @notice
