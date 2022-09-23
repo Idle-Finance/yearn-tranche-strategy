@@ -3,12 +3,13 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import { BaseStrategy } from "@yearnvaults/contracts/BaseStrategy.sol";
-import { SafeERC20, SafeMath, IERC20 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/math/Math.sol";
 
 import "../interfaces/idle/IIdleCDO.sol";
 import "../interfaces/idle/ILiquidityGaugeV3.sol";
 import "../interfaces/idle/IDistributorProxy.sol";
-import "../interfaces/uniswap/IUniswapV2Router02.sol";
+import "../interfaces/IBaseFeeOracle.sol";
 import "../interfaces/yswap/ITradeFactory.sol";
 import "../interfaces/IERC20Metadata.sol";
 import "../interfaces/IWETH.sol";
@@ -26,8 +27,10 @@ import "../interfaces/IWETH.sol";
 /// mannually claiming rewards can bypass `enabledStake` flag check
 
 contract TrancheStrategy is BaseStrategy {
-    /// @dev `tranche` have fixed 18 decimals regardless of the underlying
+    /// @dev `tranche` has fixed 18 decimals regardless of the underlying
     uint256 internal constant EXP_SCALE = 1e18;
+
+    IBaseFeeOracle internal constant BASE_FEE_ORACLE = IBaseFeeOracle(0xb5e1CAcB567d98faaDB60a1fD4820720141f064F);
 
     IWETH internal constant WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
@@ -35,12 +38,8 @@ contract TrancheStrategy is BaseStrategy {
 
     IIdleCDO public immutable idleCDO;
 
-    /// @notice junior or senior
+    /// @notice junior or senior. AATranche is Senior tranche. BB is Junior one.
     bool public immutable isAATranche;
-
-    /// @notice uniswap-v2 compatible router
-    /// @dev router is used to provide an accurate conversion ETH to want
-    IUniswapV2Router02 public router;
 
     /// @notice https://github.com/Idle-Finance/idle-gauges/tree/main/contracts
     /// @dev tokens will be staked if the `enableStake` is true. some rewards are distributed.
@@ -79,7 +78,6 @@ contract TrancheStrategy is BaseStrategy {
      * can harvest and tend a strategy.
      * @param _idleCDO  The address of IdleCDO
      * @param _isAATranche  tranche AA or BB
-     * @param _router  The address to the uni-v2 style router
      * @param _rewardTokens  The address to be swapped for the want
      * @param _gauge  The address to the Idle gauge
      * @param _dp  The address of IDLE distributorProxy
@@ -92,17 +90,15 @@ contract TrancheStrategy is BaseStrategy {
         address _keeper,
         IIdleCDO _idleCDO,
         bool _isAATranche,
-        IUniswapV2Router02 _router,
         IERC20[] memory _rewardTokens,
         ILiquidityGaugeV3 _gauge,
         IDistributorProxy _dp,
         address _healthCheck
     ) public BaseStrategy(_vault) {
-        require(address(_router) != address(0) || _healthCheck != address(0), "strat/zero-address");
+        require(_healthCheck != address(0), "strat/zero-address");
 
         idleCDO = _idleCDO;
         isAATranche = _isAATranche;
-        router = _router;
 
         // can be empaty array
         rewardTokens = _rewardTokens; // set `tradeFactory` address after deployment.
@@ -111,6 +107,7 @@ contract TrancheStrategy is BaseStrategy {
         gauge = _gauge;
         distributorProxy = _dp;
 
+        // non-zero address
         healthCheck = _healthCheck;
 
         // BaseStrategy
@@ -183,14 +180,13 @@ contract TrancheStrategy is BaseStrategy {
         }
     }
 
-    /// @notice set gauge contract
-    function setDistributorProxy(IDistributorProxy _dp) external onlyGovernance {
-        address _gauge = address(gauge);
+    /// @notice set distributor proxy contract
+    function setDistributorProxy(IDistributorProxy _dp) external onlyVaultManagers {
         IDistributorProxy _oldDp = distributorProxy; // read old distributor proxy
-
         distributorProxy = _dp; // set new distributor proxy
 
         // Claim
+        address _gauge = address(gauge);
         if (enabledStake && address(_oldDp) != address(0) && _gauge != address(0)) {
             _oldDp.distribute(_gauge);
         }
@@ -211,8 +207,9 @@ contract TrancheStrategy is BaseStrategy {
         }
     }
 
-    /// @dev this strategy must be granted STRATEGY role if `_newTradeFactory` is non-zero address NOTE: https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
-    ///      to revoke tradeFactory pass address(0) as the parameter
+    /// @dev first a role must be granted by _newTradeFactory
+    /// NOTE: https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+    ///      to revoke tradeFactory set address(0) as the parameter
     function updateTradeFactory(address _newTradeFactory) public onlyGovernance {
         if (tradeFactory != address(0)) {
             _revokeTradeFactoryPermissions();
@@ -237,7 +234,7 @@ contract TrancheStrategy is BaseStrategy {
         for (uint256 i; i < length; i++) {
             _rewardToken = _rewardTokens[i];
             _rewardToken.safeApprove(address(tf), type(uint256).max);
-            // this strategy must be granted STRATEGY role : https://github.com/yearn/yswaps/blob/7410951c9514dfa2abdcf82477cb4f92e1da7dd5/solidity/contracts/TradeFactory/TradeFactoryPositionsHandler.sol#L80
+            // a role must be granted beforehand
             tf.enable(address(_rewardToken), _want);
         }
     }
@@ -246,16 +243,17 @@ contract TrancheStrategy is BaseStrategy {
     /// @dev assume tradeFactory is not zero address
     function _revokeTradeFactoryPermissions() internal {
         address _tradeFactory = tradeFactory;
-        IERC20[] memory _rewardTokens = rewardTokens;
-        uint256 length = _rewardTokens.length;
+        uint256 length = rewardTokens.length;
 
         for (uint256 i; i < length; i++) {
-            _rewardTokens[i].safeApprove(_tradeFactory, 0);
+            rewardTokens[i].safeApprove(_tradeFactory, 0);
         }
     }
 
     // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
 
+    /// @notice AA tranche means Senior tranche which achieves a greater and leveraged yield by dragging more risk,
+    /// BB tranche means Junior one here.
     function name() external view override returns (string memory) {
         return string(abi.encodePacked("Strategy", tranche.name()));
     }
@@ -297,11 +295,11 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @notice return staked tranches + tranche balance that this contract holds
     function totalTranches() public view returns (uint256) {
-        ILiquidityGaugeV3 _gauge = gauge;
         uint256 stakedBal;
-
-        if (address(_gauge) != address(0)) {
-            stakedBal = stakedBal.add(_gauge.balanceOf(address(this)));
+        // NOTE: a conversion rate between gauge token and tranche is always 1.
+        // simply add each balances
+        if (address(gauge) != address(0)) {
+            stakedBal = gauge.balanceOf(address(this));
         }
 
         return stakedBal.add(_balance(tranche));
@@ -344,22 +342,26 @@ contract TrancheStrategy is BaseStrategy {
         // TODO: Do stuff here to free up any returns back into `want`
         // NOTE: Return `_profit` which is value generated by all positions, priced in `want`
         // NOTE: Should try to free up at least `_debtOutstanding` of underlying position
-        IERC20 _want = want;
 
         // Get total debt, total assets (want+idle)
         uint256 totalDebt = vault.strategies(address(this)).totalDebt;
         uint256 totalAssets = estimatedTotalAssets();
 
-        _profit = totalAssets > totalDebt ? totalAssets - totalDebt : 0; // no underflow
+        if (totalDebt > totalAssets) {
+            _loss = totalDebt - totalAssets; // no underflow
+        } else {
+            _profit = totalAssets - totalDebt; // no underflow
+        }
 
         // To withdraw = profit from lending + _debtOutstanding
         uint256 toFree = _debtOutstanding.add(_profit);
 
-        uint256 freed;
         // In the case want is not enough, divest from idle
-        (freed, _loss) = liquidatePosition(toFree);
-
-        _debtPayment = _debtOutstanding >= freed ? freed : _debtOutstanding; // min
+        if (toFree > 0) {
+            (uint256 _amountFreed, uint256 _withdrawalLoss) = liquidatePosition(toFree);
+            _debtPayment = Math.min(_debtOutstanding, _amountFreed);
+            _loss = _loss.add(_withdrawalLoss);
+        }
 
         // net out PnL
         if (_profit > _loss) {
@@ -414,12 +416,12 @@ contract TrancheStrategy is BaseStrategy {
         // NOTE: Maintain invariant `want.balanceOf(this) >= _liquidatedAmount`
         // NOTE: Maintain invariant `_liquidatedAmount + _loss <= _amountNeeded`
 
-        IERC20 _tranche = tranche;
         uint256 wantBal = _balance(want);
 
         if (_amountNeeded > wantBal) {
             uint256 toWithdraw = _amountNeeded - wantBal; // no underflow
-            uint256 withdrawn = _divest(_wantsInTranche(_tranche, toWithdraw));
+            // divest some of tranches
+            uint256 withdrawn = _divest(_wantsInTranche(tranche, toWithdraw));
             if (withdrawn < toWithdraw) {
                 _loss = toWithdraw - withdrawn; // no underflow
             }
@@ -447,7 +449,14 @@ contract TrancheStrategy is BaseStrategy {
         // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
         IERC20 _tranche = tranche;
 
-        // --- gauge ---
+        // rewards
+        IERC20[] memory _rewardTokens = rewardTokens;
+        uint256 length = _rewardTokens.length;
+        for (uint256 i = 0; i < length; i++) {
+            _rewardTokens[i].safeTransfer(_newStrategy, _rewardTokens[i].balanceOf(address(this)));
+        }
+
+        // gauge token
         ILiquidityGaugeV3 _gauge = gauge;
 
         if (checkStakedBeforeMigrating && address(_gauge) != address(0)) {
@@ -455,7 +464,7 @@ contract TrancheStrategy is BaseStrategy {
             if (toWithdraw != 0) _gauge.withdraw(toWithdraw, false);
         }
 
-        // transfer funds
+        // tranche
         uint256 trancheBalance = _balance(_tranche);
         if (trancheBalance != 0) {
             _tranche.safeTransfer(_newStrategy, trancheBalance);
@@ -475,34 +484,8 @@ contract TrancheStrategy is BaseStrategy {
     //      protected[2] = tokenC;
     //      return protected;
     //    }
-    /// @dev in case of emergency we have the option to turn `checkStakedBeforeMigrating` off
-    function protectedTokens() internal view virtual override returns (address[] memory) {
-        IERC20[] memory _rewardTokens = rewardTokens;
-        uint256 length = _rewardTokens.length;
-
-        address[] memory protected;
-
-        // gov can sweep *any token excluding `want`*
-        if (msg.sender == governance()) {
-            return protected;
-        }
-
-        // work successfully
-        if (checkStakedBeforeMigrating) {
-            protected = new address[](length + 1);
-            protected[length] = address(tranche);
-        } else {
-            // escape hatche as we can during an emergency.
-            // skip protecting tranche
-            protected = new address[](length);
-        }
-
-        for (uint256 i; i < length; i++) {
-            protected[i] = address(_rewardTokens[i]);
-        }
-
-        return protected;
-    }
+    /// NOTE: Governance can sweep any token except the `want` and `shares`
+    function protectedTokens() internal view virtual override returns (address[] memory protected) {}
 
     /**
      * @notice
@@ -518,21 +501,22 @@ contract TrancheStrategy is BaseStrategy {
      * @param _amount The amount (in wei/1e-18 ETH) to convert to `want`
      * @return The amount in `want` of `_amtInEth` converted to `want`
      **/
-    function ethToWant(uint256 _amount) public view virtual override returns (uint256) {
-        if (_amount == 0) {
-            return 0;
-        }
+    function ethToWant(uint256 _amount) public view virtual override returns (uint256) {}
 
-        address WETH_ADDRESS = address(WETH);
-        address _want = address(want);
-
-        if (_want == WETH_ADDRESS) {
-            return _amount;
-        }
-
-        uint256[] memory amounts = router.getAmountsOut(_amount, _getTokenOutPathV2(WETH_ADDRESS, _want));
-
-        return amounts[amounts.length - 1];
+    /**
+     * @notice
+     *  Provide a signal to the keeper that `harvest()` should be called. The
+     *  keeper will provide the estimated gas cost that they would pay to call
+     *  `harvest()`, and this function should use that estimate to make a
+     *  determination if calling it is "worth it" for the keeper. This is not
+     *  the only consideration into issuing this trigger, for example if the
+     *  position would be negatively affected if `harvest()` is not called
+     *  shortly, then this can return `true` even if the keeper might be "at a
+     *  loss" (keepers are always reimbursed by Yearn).
+     * @return `true` if `harvest()` should be called, `false` otherwise.
+     */
+    function harvestTrigger(uint256 callCostInWei) public view virtual override returns (bool) {
+        return BASE_FEE_ORACLE.isCurrentBaseFeeAcceptable() && super.harvestTrigger(callCostInWei);
     }
 
     // ************************* External Invest/Divest methods *************************
@@ -569,21 +553,23 @@ contract TrancheStrategy is BaseStrategy {
     }
 
     /// @notice redeem `tranche` from IdleCDO and withdraw `want`
-    /// @param _trancheAmount amount of `want` to deposit
+    /// @param _trancheAmount amount of tranche needed
     /// @return wantRedeemed : want redeemed
     function _divest(uint256 _trancheAmount) internal virtual returns (uint256 wantRedeemed) {
         IERC20 _want = want;
 
         uint256 trancheBal = _balance(tranche);
 
-        // if tranche to withdraw > current balance, withdraw
-        if (_trancheAmount > trancheBal) {
+        // if tranches to withdraw > current balance, withdraw staked tranches from gauge
+        if (_trancheAmount > trancheBal && address(gauge) != address(0)) {
             ILiquidityGaugeV3 _gauge = gauge;
 
             uint256 stakedBal = _gauge.balanceOf(address(this));
-            uint256 toWithdraw = _toWithdraw(_trancheAmount, trancheBal, stakedBal);
+            // NOTE: a conersion rate between gauge token and tranche is always 1.
+            // due to rounding error, `trancheAmount - trancheBal` may be greater than `stakedBal`.
+            // get smaller one here to be sure that this strategy don't withdraw amounts greater than actual balance.
+            uint256 toWithdraw = Math.min(stakedBal, _trancheAmount - trancheBal); // no underflow
 
-            // if tranche to withdraw > current balance, withdraw
             if (toWithdraw != 0) _gauge.withdraw(toWithdraw, false);
         }
 
@@ -592,17 +578,6 @@ contract TrancheStrategy is BaseStrategy {
         _withdrawTranche(_trancheAmount);
 
         wantRedeemed = _balance(_want).sub(before);
-    }
-
-    function _toWithdraw(
-        uint256 _trancheAmount,
-        uint256 _trancheBal,
-        uint256 _stakedBal
-    ) private view returns (uint256) {
-        return
-            _stakedBal >= _trancheAmount - _trancheBal // should be _stakedBal == _trancheAmount - _trancheBal
-                ? _trancheAmount - _trancheBal // no underflow
-                : _stakedBal;
     }
 
     /// @notice claim liquidity mining rewards
@@ -623,19 +598,26 @@ contract TrancheStrategy is BaseStrategy {
     /// @dev when `want` is different from CDO underlying token, this method will be overridden by pararent contract
     /// @param _underlyingAmount underlying amount of idleCDO
     function _depositTranche(uint256 _underlyingAmount) internal virtual {
-        function(uint256) external returns (uint256) _depositXX = isAATranche ? idleCDO.depositAA : idleCDO.depositBB;
-
-        if (_underlyingAmount != 0) _depositXX(_underlyingAmount);
+        if (_underlyingAmount != 0) {
+            if (isAATranche) {
+                idleCDO.depositAA(_underlyingAmount);
+            } else {
+                idleCDO.depositBB(_underlyingAmount);
+            }
+        }
     }
 
     /// @notice redeem tranches and get `want`
     /// @dev when `want` is different from CDO underlying token, this method will be overridden by pararent contract
     /// @param _trancheAmount amount of `tranche`
     function _withdrawTranche(uint256 _trancheAmount) internal virtual {
-        function(uint256) external returns (uint256) _withdrawXX =
-            isAATranche ? idleCDO.withdrawAA : idleCDO.withdrawBB;
-
-        if (_trancheAmount != 0) _withdrawXX(_trancheAmount);
+        if (_trancheAmount != 0) {
+            if (isAATranche) {
+                idleCDO.withdrawAA(_trancheAmount);
+            } else {
+                idleCDO.withdrawBB(_trancheAmount);
+            }
+        }
     }
 
     /* **** Internal Helper functions **** */
@@ -645,44 +627,27 @@ contract TrancheStrategy is BaseStrategy {
 
     /// @dev convert `tranches` denominated in `want`
     /// @notice Usually idleCDO.underlyingToken is equal to the `want`
-    function _tranchesInWant(IERC20 _tranche, uint256 trancheAmount) internal view virtual returns (uint256) {
-        return _tranchesInUnderlyingToken(_tranche, trancheAmount);
+    function _tranchesInWant(IERC20 _tranche, uint256 _trancheAmount) internal view virtual returns (uint256) {
+        return _tranchesInUnderlyingToken(_tranche, _trancheAmount);
     }
 
     /// @dev convert `tranches` to `underlyingToken`
-    function _tranchesInUnderlyingToken(IERC20 _tranche, uint256 trancheAmount) internal view returns (uint256) {
-        if (trancheAmount == 0) return 0;
+    function _tranchesInUnderlyingToken(IERC20 _tranche, uint256 _trancheAmount) internal view returns (uint256) {
+        if (_trancheAmount == 0) return 0;
         // price has the same decimals as underlying
         uint256 price = idleCDO.virtualPrice(address(_tranche));
-        return trancheAmount.mul(price).div(EXP_SCALE);
+        return _trancheAmount.mul(price).div(EXP_SCALE);
     }
 
-    /// @dev convert `wantAmount` denominated in `tranche`
+    /// @dev convert `_wantAmount` denominated in `tranche`
     /// @notice Usually idleCDO.underlyingToken is equal to the `want`
-    function _wantsInTranche(IERC20 _tranche, uint256 wantAmount) internal view virtual returns (uint256) {
-        return _underlyingTokensInTranche(_tranche, wantAmount);
+    function _wantsInTranche(IERC20 _tranche, uint256 _wantAmount) internal view virtual returns (uint256) {
+        return _underlyingTokensInTranche(_tranche, _wantAmount);
     }
 
-    /// @dev convert `underlyingTokens` to `tranche`
-    function _underlyingTokensInTranche(IERC20 _tranche, uint256 underlyingTokens) internal view returns (uint256) {
-        if (underlyingTokens == 0) return 0;
-        return underlyingTokens.mul(EXP_SCALE).div(idleCDO.virtualPrice(address(_tranche)));
-    }
-
-    function _getTokenOutPathV2(address _tokenIn, address _tokenOut) internal view returns (address[] memory _path) {
-        require(_tokenIn != _tokenOut, "strat/identical-address");
-        address WETH_ADDRESS = address(WETH);
-        bool isWeth = _tokenIn == WETH_ADDRESS || _tokenOut == WETH_ADDRESS;
-
-        if (isWeth) {
-            _path = new address[](2);
-            _path[0] = _tokenIn;
-            _path[1] = _tokenOut;
-        } else {
-            _path = new address[](3);
-            _path[0] = _tokenIn;
-            _path[1] = WETH_ADDRESS;
-            _path[2] = _tokenOut;
-        }
+    /// @dev convert `_underlyingTokens` to `tranche`
+    function _underlyingTokensInTranche(IERC20 _tranche, uint256 _underlyingTokens) internal view returns (uint256) {
+        if (_underlyingTokens == 0) return 0;
+        return _underlyingTokens.mul(EXP_SCALE).div(idleCDO.virtualPrice(address(_tranche)));
     }
 }

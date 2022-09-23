@@ -89,8 +89,10 @@ def test_check_staked_before_migrating(
 
     # tranches can not be transferred when checkStakedBeforeMigrating is True
     assert strategy.checkStakedBeforeMigrating() is True
-    with brownie.reverts():
-        strategy.sweep(strategy.tranche(), {"from": gov})
+    # with brownie.reverts():
+    #     strategy.sweep(strategy.tranche(), {"from": gov})
+    # gov can sweep any token excluding `want`
+    # strategy.sweep(strategy.tranche(), {"from": gov})
 
     strategy.setCheckStakedBeforeMigrating(False, {"from": gov})
     assert strategy.checkStakedBeforeMigrating() is False

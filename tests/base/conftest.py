@@ -3,12 +3,23 @@ from brownie import config, Contract, interface, ZERO_ADDRESS
 
 
 STRATEGY_CONFIGS = {
-    "DAI": {
+    # "DAI_AA": {
+    #     "idleCDO": {
+    #         "address": "0xd0dbcd556ca22d3f3c142e9a3220053fd7a247bc",
+    #         # "gauge": {"address": "", "reward": ""}
+    #     },
+    #     "tranche_type": "AA",
+    #     "whale": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
+    #     "token_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+    #     "amount": 10000000 * 1e18,
+    #     "strategy": "TrancheStrategy"
+    # },
+    "DAI_BB": {
         "idleCDO": {
             "address": "0xd0dbcd556ca22d3f3c142e9a3220053fd7a247bc",
             # "gauge": {"address": "", "reward": ""}
         },
-        "tranche_type": "AA",
+        "tranche_type": "BB",
         "whale": "0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf",
         "token_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
         "amount": 10000000 * 1e18,
@@ -83,7 +94,6 @@ def strategy(strategist, keeper, vault, rewards, idleCDO, sushiswap_router, gov,
         keeper,
         idleCDO,
         is_AA,
-        sushiswap_router,
         [],
         gauge,
         distributor_proxy,
